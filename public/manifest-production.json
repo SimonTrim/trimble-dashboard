@@ -1,0 +1,19 @@
+{
+  "name": "Project Dashboard",
+  "version": "1.0.0",
+  "description": "Tableau de bord des métriques projet pour Trimble Connect",
+  "author": "Simon Martin - Trimble",
+  "extensions": [{
+    "type": "panel",
+    "id": "dashboard-panel",
+    "title": "Dashboard",
+    "entryPoint": "https://simontrim.github.io/trimble-dashboard/dist/index.js"
+  }],
+  "permissions": [
+    "project.read",
+    "notes.read",
+    "bcf.read",
+    "files.read",
+    "views.read"
+  ]
+}
