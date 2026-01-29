@@ -8,6 +8,7 @@ import { Dashboard } from './ui/dashboard';
 import { logger } from './utils/logger';
 import { errorHandler, ErrorCode } from './utils/errorHandler';
 import { trimbleClient } from './api/trimbleClient';
+import { createWorkspaceAPIAdapter } from './api/workspaceAPIAdapter';
 
 // Type pour l'API Workspace
 interface WorkspaceAPIInstance {
@@ -119,13 +120,21 @@ async function initializeIntegrated(): Promise<void> {
   if (workspaceAPI) {
     const projectInfo = await workspaceAPI.project.getCurrentProject();
     projectId = projectInfo.id;
-    logger.info(`Connected to project: ${projectInfo.name}`, { projectId });
+    logger.info(`Connected to project: ${projectInfo.name}`, { 
+      projectId, 
+      projectName: projectInfo.name,
+      location: projectInfo.location 
+    });
   }
 
-  // Étape 3: Initialiser le TrimbleClient (avec mock pour l'instant)
-  logger.info('Initializing TrimbleClient...');
-  logger.warn('⚠️ Using MOCK data - Real data access requires REST API implementation');
-  await trimbleClient.initialize(); // Utilisera automatiquement le mock
+  // Étape 3: Créer un adaptateur pour le WorkspaceAPI
+  logger.info('Creating WorkspaceAPI adapter for real data access...');
+  const apiAdapter = createWorkspaceAPIAdapter(workspaceAPI, projectId!);
+  
+  // Initialiser le TrimbleClient avec l'adaptateur
+  logger.info('Initializing TrimbleClient with real Workspace API...');
+  trimbleClient.initializeWithApi(apiAdapter, projectId);
+  logger.info('✓ Using REAL project data from Trimble Connect');
   
   // Étape 4: Créer le menu dans le panneau latéral
   logger.info('Creating sidebar menu...');
@@ -154,17 +163,17 @@ function createSidebarMenu(): void {
 
   const mainMenuObject = {
     title: 'Project Dashboard',
-    icon: 'https://simontrim.github.io/trimble-dashboard/public/icon.svg',
+    icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-48.png',
     command: 'show_dashboard',
     subMenus: [
       {
         title: 'Vue d\'ensemble',
-        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon.svg',
+        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-48.png',
         command: 'show_overview',
       },
       {
         title: 'Actualiser',
-        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon.svg',
+        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-48.png',
         command: 'refresh_data',
       }
     ],
