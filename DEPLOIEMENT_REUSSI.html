@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>✅ Déploiement Réussi!</title>
+  <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      color: white;
+    }
+    .container {
+      text-align: center;
+      background: rgba(255,255,255,0.1);
+      padding: 50px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+    }
+    h1 { font-size: 48px; margin-bottom: 20px; }
+    p { font-size: 20px; margin: 10px 0; }
+    .emoji { font-size: 80px; }
+    .links {
+      margin-top: 30px;
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+    }
+    .btn {
+      background: white;
+      color: #667eea;
+      padding: 15px 30px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: bold;
+      transition: transform 0.2s;
+    }
+    .btn:hover { transform: scale(1.05); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="emoji">🎉</div>
+    <h1>Déploiement Réussi!</h1>
+    <p>Votre extension Trimble Dashboard est en ligne!</p>
+    <p><strong>URL:</strong> https://simontrim.github.io/trimble-dashboard/</p>
+    <div class="links">
+      <a href="dist/test.html" class="btn">🧪 Tester l'extension</a>
+      <a href="public/manifest-production.json" class="btn">📄 Voir le manifest</a>
+    </div>
+  </div>
+</body>
+</html>
