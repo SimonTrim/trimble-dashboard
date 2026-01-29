@@ -1,6 +1,6 @@
 /**
  * Point d'entrée principal de l'extension Trimble Dashboard
- * Initialise l'extension et lance le dashboard
+ * Utilise le Workspace API pour s'intégrer dans Trimble Connect
  */
 /**
  * Fonction d'initialisation principale

@@ -1,64 +1,205 @@
 /**
  * Point d'entrée principal de l'extension Trimble Dashboard
- * Initialise l'extension et lance le dashboard
+ * Utilise le Workspace API pour s'intégrer dans Trimble Connect
  */
 
-import { trimbleClient } from './api/trimbleClient';
+import * as WorkspaceAPI from 'trimble-connect-workspace-api';
 import { Dashboard } from './ui/dashboard';
 import { logger } from './utils/logger';
 import { errorHandler, ErrorCode } from './utils/errorHandler';
+
+// Type pour l'API Workspace
+interface WorkspaceAPIInstance {
+  ui: {
+    setMenu: (menu: any) => void;
+    setActiveMenuItem: (command: string) => void;
+  };
+  project: {
+    getCurrentProject: () => Promise<any>;
+  };
+  user: {
+    getUserSettings: () => Promise<any>;
+  };
+  extension: {
+    requestPermission: (permission: 'accesstoken') => Promise<string>;
+  };
+}
+
+let workspaceAPI: WorkspaceAPIInstance | null = null;
+let dashboard: Dashboard | null = null;
+let isDashboardVisible = false;
 
 /**
  * Fonction d'initialisation principale
  */
 async function initialize(): Promise<void> {
   try {
-    logger.info('=== Trimble Dashboard Extension Starting ===');
-    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info('🚀 Initializing Trimble Dashboard Extension');
 
-    // Vérifier si l'API Trimble est disponible
-    const isTrimbleAPIAvailable = typeof (window as any).TrimbleConnectWorkspace !== 'undefined';
+    // Étape 1: Se connecter à Trimble Connect via WorkspaceAPI
+    logger.info('Connecting to Trimble Connect Workspace API...');
     
-    if (!isTrimbleAPIAvailable) {
-      logger.warn('🧪 MODE TEST LOCAL - API Trimble non disponible');
-      logger.warn('📊 Utilisation de données de démonstration (Mock)');
-      logger.warn('💡 Pour les vraies données, chargez l\'extension dans Trimble Connect');
+    workspaceAPI = await WorkspaceAPI.connect(
+      window.parent,
+      handleWorkspaceEvents
+    );
+    
+    logger.info('✓ Connected to Workspace API');
+
+    // Étape 2: Créer le menu dans le panneau latéral
+    logger.info('Creating sidebar menu...');
+    createSidebarMenu();
+    
+    // Étape 3: Obtenir les infos du projet
+    if (workspaceAPI) {
+      const projectInfo = await workspaceAPI.project.getCurrentProject();
+      logger.info(`Connected to project: ${projectInfo.name}`, { projectId: projectInfo.id });
     }
 
-    // Étape 1: Initialiser la connexion à Trimble Connect
-    logger.info('Step 1: Connecting to Trimble Connect API...');
-    await trimbleClient.initialize();
-    logger.info('✓ Connected to Trimble Connect');
-
-    // Étape 2: Créer et afficher le dashboard
-    logger.info('Step 2: Initializing dashboard...');
-    const dashboard = new Dashboard('app', {
-      refreshInterval: 30000,        // 30 secondes
-      recentFilesThreshold: 48,      // 48 heures
-      maxRecentFilesDisplay: 10,     // 10 fichiers max
+    // Étape 4: Créer l'instance du dashboard (masquée au départ)
+    logger.info('Initializing dashboard...');
+    dashboard = new Dashboard('app', {
+      refreshInterval: 30000,
+      recentFilesThreshold: 48,
+      maxRecentFilesDisplay: 10,
       enableAutoRefresh: true,
     });
 
-    await dashboard.render();
-    logger.info('✓ Dashboard rendered successfully');
-
-    logger.info('=== Extension Loaded Successfully ===');
-
-    // Exposer le dashboard globalement pour le débogage (uniquement en dev)
-    if (process.env.NODE_ENV !== 'production') {
-      (window as any).trimbleDashboard = {
-        dashboard,
-        trimbleClient,
-        logger,
-      };
-      logger.debug('Debug objects exposed on window.trimbleDashboard');
-    }
+    logger.info('✅ Extension ready!');
 
   } catch (error) {
-    logger.error('=== Extension Failed to Load ===', { error });
-    
-    // Afficher un message d'erreur à l'utilisateur
+    logger.error('❌ Extension Failed to Load', { error });
     displayInitializationError(error);
+  }
+}
+
+/**
+ * Créer le menu dans le panneau latéral de Trimble Connect
+ */
+function createSidebarMenu(): void {
+  if (!workspaceAPI) {
+    logger.error('WorkspaceAPI not initialized');
+    return;
+  }
+
+  const mainMenuObject = {
+    title: 'Project Dashboard',
+    icon: 'https://simontrim.github.io/trimble-dashboard/public/icon.svg',
+    command: 'show_dashboard',
+    subMenus: [
+      {
+        title: 'Vue d\'ensemble',
+        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon.svg',
+        command: 'show_overview',
+      },
+      {
+        title: 'Actualiser',
+        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon.svg',
+        command: 'refresh_data',
+      }
+    ],
+  };
+
+  // Mettre à jour le menu Trimble Connect
+  workspaceAPI.ui.setMenu(mainMenuObject);
+  logger.info('✓ Sidebar menu created');
+  
+  // Activer le premier sous-menu par défaut
+  workspaceAPI.ui.setActiveMenuItem('show_overview');
+}
+
+/**
+ * Gérer les événements du Workspace API
+ */
+function handleWorkspaceEvents(event: string, args: any): void {
+  logger.info(`Workspace event: ${event}`, args);
+
+  switch (event) {
+    case 'extension.command':
+      handleCommand(args.data);
+      break;
+      
+    case 'extension.accessToken':
+      logger.info('Access token received', { status: args.data });
+      break;
+      
+    case 'extension.userSettingsChanged':
+      logger.info('User settings changed');
+      break;
+      
+    default:
+      logger.debug(`Unhandled event: ${event}`, args);
+  }
+}
+
+/**
+ * Gérer les commandes du menu
+ */
+async function handleCommand(command: string): Promise<void> {
+  logger.info(`Command received: ${command}`);
+
+  if (!workspaceAPI) {
+    logger.error('WorkspaceAPI not initialized');
+    return;
+  }
+
+  switch (command) {
+    case 'show_dashboard':
+    case 'show_overview':
+      // Afficher le dashboard
+      await showDashboard();
+      workspaceAPI.ui.setActiveMenuItem(command);
+      break;
+      
+    case 'refresh_data':
+      // Rafraîchir les données
+      await refreshDashboard();
+      break;
+      
+    default:
+      logger.warn(`Unknown command: ${command}`);
+  }
+}
+
+/**
+ * Afficher le dashboard
+ */
+async function showDashboard(): Promise<void> {
+  if (!dashboard) {
+    logger.error('Dashboard not initialized');
+    return;
+  }
+
+  if (isDashboardVisible) {
+    logger.info('Dashboard already visible');
+    return;
+  }
+
+  try {
+    logger.info('Showing dashboard...');
+    await dashboard.render();
+    isDashboardVisible = true;
+    logger.info('✓ Dashboard displayed');
+  } catch (error) {
+    logger.error('Failed to show dashboard', { error });
+  }
+}
+
+/**
+ * Rafraîchir les données du dashboard
+ */
+async function refreshDashboard(): Promise<void> {
+  if (!dashboard) {
+    logger.error('Dashboard not initialized');
+    return;
+  }
+
+  try {
+    logger.info('Refreshing dashboard data...');
+    await dashboard.render(); // Re-render pour rafraîchir les données
+    logger.info('✓ Data refreshed');
+  } catch (error) {
+    logger.error('Failed to refresh data', { error });
   }
 }
 
