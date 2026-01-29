@@ -8,6 +8,10 @@ declare class TrimbleClient {
     private projectId;
     private isInitialized;
     /**
+     * Initialiser avec une API déjà connectée (pour usage avec WorkspaceAPI)
+     */
+    initializeWithApi(connectedApi: TrimbleAPI, projectId?: string): void;
+    /**
      * Initialiser la connexion avec Trimble Connect
      */
     initialize(): Promise<TrimbleAPI>;

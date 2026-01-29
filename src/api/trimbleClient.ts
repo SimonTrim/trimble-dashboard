@@ -16,6 +16,16 @@ class TrimbleClient {
   private isInitialized: boolean = false;
 
   /**
+   * Initialiser avec une API déjà connectée (pour usage avec WorkspaceAPI)
+   */
+  initializeWithApi(connectedApi: TrimbleAPI, projectId?: string): void {
+    this.api = connectedApi;
+    this.projectId = projectId || null;
+    this.isInitialized = true;
+    logger.info('✓ TrimbleClient initialized with connected API');
+  }
+
+  /**
    * Initialiser la connexion avec Trimble Connect
    */
   async initialize(): Promise<TrimbleAPI> {

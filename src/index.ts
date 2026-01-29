@@ -7,6 +7,7 @@ import * as WorkspaceAPI from 'trimble-connect-workspace-api';
 import { Dashboard } from './ui/dashboard';
 import { logger } from './utils/logger';
 import { errorHandler, ErrorCode } from './utils/errorHandler';
+import { trimbleClient } from './api/trimbleClient';
 
 // Type pour l'API Workspace
 interface WorkspaceAPIInstance {
@@ -46,17 +47,24 @@ async function initialize(): Promise<void> {
     
     logger.info('✓ Connected to Workspace API');
 
-    // Étape 2: Créer le menu dans le panneau latéral
-    logger.info('Creating sidebar menu...');
-    createSidebarMenu();
-    
-    // Étape 3: Obtenir les infos du projet
+    // Étape 2: Obtenir les infos du projet
+    let projectId: string | undefined;
     if (workspaceAPI) {
       const projectInfo = await workspaceAPI.project.getCurrentProject();
-      logger.info(`Connected to project: ${projectInfo.name}`, { projectId: projectInfo.id });
+      projectId = projectInfo.id;
+      logger.info(`Connected to project: ${projectInfo.name}`, { projectId });
     }
 
-    // Étape 4: Créer l'instance du dashboard (masquée au départ)
+    // Étape 3: Initialiser le TrimbleClient (avec mock pour l'instant)
+    logger.info('Initializing TrimbleClient...');
+    logger.warn('⚠️ Using MOCK data - Real data access requires REST API implementation');
+    await trimbleClient.initialize(); // Utilisera automatiquement le mock
+    
+    // Étape 4: Créer le menu dans le panneau latéral
+    logger.info('Creating sidebar menu...');
+    createSidebarMenu();
+
+    // Étape 5: Créer l'instance du dashboard (masquée au départ)
     logger.info('Initializing dashboard...');
     dashboard = new Dashboard('app', {
       refreshInterval: 30000,
