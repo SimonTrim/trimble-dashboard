@@ -29,6 +29,27 @@ interface WorkspaceAPIInstance {
 let workspaceAPI: WorkspaceAPIInstance | null = null;
 let dashboard: Dashboard | null = null;
 let isDashboardVisible = false;
+let isStandaloneMode = false;
+
+/**
+ * Détecter si nous sommes en mode standalone (lien direct) ou intégré (iframe Trimble Connect)
+ */
+function isRunningInTrimbleConnect(): boolean {
+  try {
+    // Vérifier si nous sommes dans un iframe
+    if (window.self === window.parent) {
+      return false; // Pas dans un iframe
+    }
+    
+    // Vérifier si window.parent est accessible (pas de cross-origin block)
+    // Si on peut accéder à window.parent.location, on est dans Trimble Connect
+    void window.parent.location.href;
+    return true;
+  } catch (e) {
+    // Cross-origin error = on est dans un iframe mais pas dans Trimble Connect
+    return false;
+  }
+}
 
 /**
  * Fonction d'initialisation principale
@@ -37,48 +58,89 @@ async function initialize(): Promise<void> {
   try {
     logger.info('🚀 Initializing Trimble Dashboard Extension');
 
-    // Étape 1: Se connecter à Trimble Connect via WorkspaceAPI
-    logger.info('Connecting to Trimble Connect Workspace API...');
+    // Détecter le mode d'exécution
+    isStandaloneMode = !isRunningInTrimbleConnect();
     
-    workspaceAPI = await WorkspaceAPI.connect(
-      window.parent,
-      handleWorkspaceEvents
-    );
-    
-    logger.info('✓ Connected to Workspace API');
-
-    // Étape 2: Obtenir les infos du projet
-    let projectId: string | undefined;
-    if (workspaceAPI) {
-      const projectInfo = await workspaceAPI.project.getCurrentProject();
-      projectId = projectInfo.id;
-      logger.info(`Connected to project: ${projectInfo.name}`, { projectId });
+    if (isStandaloneMode) {
+      logger.info('🌐 Running in STANDALONE mode (direct link)');
+      await initializeStandalone();
+    } else {
+      logger.info('📦 Running in INTEGRATED mode (Trimble Connect)');
+      await initializeIntegrated();
     }
-
-    // Étape 3: Initialiser le TrimbleClient (avec mock pour l'instant)
-    logger.info('Initializing TrimbleClient...');
-    logger.warn('⚠️ Using MOCK data - Real data access requires REST API implementation');
-    await trimbleClient.initialize(); // Utilisera automatiquement le mock
-    
-    // Étape 4: Créer le menu dans le panneau latéral
-    logger.info('Creating sidebar menu...');
-    createSidebarMenu();
-
-    // Étape 5: Créer l'instance du dashboard (masquée au départ)
-    logger.info('Initializing dashboard...');
-    dashboard = new Dashboard('app', {
-      refreshInterval: 30000,
-      recentFilesThreshold: 48,
-      maxRecentFilesDisplay: 10,
-      enableAutoRefresh: true,
-    });
-
-    logger.info('✅ Extension ready!');
 
   } catch (error) {
     logger.error('❌ Extension Failed to Load', { error });
     displayInitializationError(error);
   }
+}
+
+/**
+ * Initialisation en mode standalone (lien direct)
+ */
+async function initializeStandalone(): Promise<void> {
+  // Initialiser le TrimbleClient avec mock
+  logger.info('Initializing TrimbleClient with mock data...');
+  logger.warn('⚠️ Using MOCK data - Real data access requires REST API implementation');
+  await trimbleClient.initialize();
+  
+  // Créer et afficher le dashboard immédiatement
+  logger.info('Creating dashboard...');
+  dashboard = new Dashboard('app', {
+    refreshInterval: 30000,
+    recentFilesThreshold: 48,
+    maxRecentFilesDisplay: 10,
+    enableAutoRefresh: true,
+  });
+
+  // Afficher immédiatement en mode standalone
+  await dashboard.render();
+  isDashboardVisible = true;
+  
+  logger.info('✅ Extension ready in standalone mode!');
+}
+
+/**
+ * Initialisation en mode intégré (Trimble Connect)
+ */
+async function initializeIntegrated(): Promise<void> {
+  // Étape 1: Se connecter à Trimble Connect via WorkspaceAPI
+  logger.info('Connecting to Trimble Connect Workspace API...');
+  
+  workspaceAPI = await WorkspaceAPI.connect(
+    window.parent,
+    handleWorkspaceEvents
+  );
+  
+  logger.info('✓ Connected to Workspace API');
+
+  // Étape 2: Obtenir les infos du projet
+  let projectId: string | undefined;
+  if (workspaceAPI) {
+    const projectInfo = await workspaceAPI.project.getCurrentProject();
+    projectId = projectInfo.id;
+    logger.info(`Connected to project: ${projectInfo.name}`, { projectId });
+  }
+
+  // Étape 3: Initialiser le TrimbleClient (avec mock pour l'instant)
+  logger.info('Initializing TrimbleClient...');
+  logger.warn('⚠️ Using MOCK data - Real data access requires REST API implementation');
+  await trimbleClient.initialize(); // Utilisera automatiquement le mock
+  
+  // Étape 4: Créer le menu dans le panneau latéral
+  logger.info('Creating sidebar menu...');
+  createSidebarMenu();
+
+  // Étape 5: Créer l'instance du dashboard (masquée au départ)
+  logger.info('Initializing dashboard...');
+  dashboard = new Dashboard('app', {
+    refreshInterval: 30000,
+    recentFilesThreshold: 48,
+    maxRecentFilesDisplay: 10,
+    enableAutoRefresh: true,
+  });
+
+  logger.info('✅ Extension ready in integrated mode!');
 }
 
 /**
