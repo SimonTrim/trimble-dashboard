@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- Fond bleu Trimble -->
+  <rect width="64" height="64" rx="12" fill="#005F9E"/>
+  
+  <!-- Icône graphique (chart) -->
+  <g fill="white">
+    <!-- Barre 1 -->
+    <rect x="12" y="35" width="8" height="17" rx="2"/>
+    <!-- Barre 2 -->
+    <rect x="23" y="28" width="8" height="24" rx="2"/>
+    <!-- Barre 3 -->
+    <rect x="34" y="22" width="8" height="30" rx="2"/>
+    <!-- Barre 4 -->
+    <rect x="45" y="18" width="8" height="34" rx="2"/>
+  </g>
+  
+  <!-- Emoji dashboard -->
+  <text x="32" y="20" font-size="16" text-anchor="middle" fill="white">=Ê</text>
+</svg>
