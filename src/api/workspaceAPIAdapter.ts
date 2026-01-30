@@ -62,7 +62,7 @@ export class WorkspaceAPIAdapter {
     const token = await this.getAccessToken();
     
     const url = `${this.baseUrl}${endpoint}`;
-    logger.debug(`API Call: ${options.method || 'GET'} ${url}`);
+    logger.info(`🌐 API Call: ${options.method || 'GET'} ${url}`);
 
     const response = await fetch(url, {
       ...options,
@@ -74,10 +74,21 @@ export class WorkspaceAPIAdapter {
     });
 
     if (!response.ok) {
-      throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      logger.error(`❌ API call failed: ${response.status} ${response.statusText}`, {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        errorBody: errorText
+      });
+      throw new Error(`API call failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+    logger.info(`✅ API call success: ${url}`, { 
+      dataLength: Array.isArray(data) ? data.length : 'not an array'
+    });
+    return data;
   }
 
   /**
