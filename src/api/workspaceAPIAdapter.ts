@@ -30,11 +30,14 @@ export class WorkspaceAPIAdapter {
   private workspaceAPI: WorkspaceAPIInstance;
   private projectId: string;
   private accessToken: string | null = null;
-  private baseUrl: string = 'https://app.connect.trimble.com/tc/api/2.0';
+  private baseUrl: string = 'https://app21.connect.trimble.com/tc/api/2.0'; // Region Europe
 
   constructor(workspaceAPI: WorkspaceAPIInstance, projectId: string) {
     this.workspaceAPI = workspaceAPI;
     this.projectId = projectId;
+    
+    logger.warn('⚠️ WorkspaceAPIAdapter: REST API calls from iframe are blocked by CORS');
+    logger.warn('⚠️ Using mock data fallback until Trimble Connect provides direct API access');
   }
 
   /**

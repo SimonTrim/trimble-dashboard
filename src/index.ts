@@ -8,7 +8,7 @@ import { Dashboard } from './ui/dashboard';
 import { logger } from './utils/logger';
 import { errorHandler, ErrorCode } from './utils/errorHandler';
 import { trimbleClient } from './api/trimbleClient';
-import { createWorkspaceAPIAdapter } from './api/workspaceAPIAdapter';
+// import { createWorkspaceAPIAdapter } from './api/workspaceAPIAdapter'; // Temporairement désactivé (CORS limitation)
 
 // Type pour l'API Workspace
 interface WorkspaceAPIInstance {
@@ -113,30 +113,32 @@ async function initializeIntegrated(): Promise<void> {
 
   // Étape 2: Obtenir les infos du projet
   let projectId: string | undefined;
+  let projectInfo: any;
   if (workspaceAPI) {
-    const projectInfo = await workspaceAPI.project.getCurrentProject();
+    projectInfo = await workspaceAPI.project.getCurrentProject();
     projectId = projectInfo.id;
-    logger.info(`Connected to project: ${projectInfo.name}`, { 
+    logger.info(`✅ Connected to project: ${projectInfo.name}`, { 
       projectId, 
       projectName: projectInfo.name,
       location: projectInfo.location 
     });
   }
 
-  // Étape 3: Créer un adaptateur pour le WorkspaceAPI
-  logger.info('Creating WorkspaceAPI adapter for real data access...');
-  const apiAdapter = createWorkspaceAPIAdapter(workspaceAPI, projectId!);
+  // Étape 3: LIMITATION TECHNIQUE - Les données de fichiers/notes/BCF ne sont pas accessibles
+  // Le WorkspaceAPI ne fournit pas de méthodes pour récupérer ces données
+  // Les appels REST directs sont bloqués par CORS depuis GitHub Pages
+  logger.warn('⚠️ CORS Limitation: Cannot access REST API from GitHub Pages');
+  logger.warn('⚠️ Displaying project info with simulated metrics');
+  logger.info('💡 Solution: Deploy extension on Trimble-approved domain or use backend proxy');
   
-  // Initialiser le TrimbleClient avec l'adaptateur
-  logger.info('Initializing TrimbleClient with real Workspace API...');
-  trimbleClient.initializeWithApi(apiAdapter, projectId);
-  logger.info('✓ Using REAL project data from Trimble Connect');
+  // Initialiser avec mock data pour l'instant
+  await trimbleClient.initialize();
   
   // Étape 4: Créer le menu dans le panneau latéral
   logger.info('Creating sidebar menu...');
   createSidebarMenu();
 
-  // Étape 5: Créer l'instance du dashboard (masquée au départ)
+  // Étape 5: Créer l'instance du dashboard avec le nom du projet réel
   logger.info('Initializing dashboard...');
   dashboard = new Dashboard('app', {
     refreshInterval: 30000,
@@ -145,7 +147,26 @@ async function initializeIntegrated(): Promise<void> {
     enableAutoRefresh: true,
   });
 
-  logger.info('✅ Extension ready in integrated mode!');
+  // Afficher un message avec le nom du projet réel
+  const appContainer = document.getElementById('app');
+  if (appContainer && projectInfo) {
+    const infoDiv = document.createElement('div');
+    infoDiv.style.cssText = 'padding: 20px; background: #FFF3CD; border: 1px solid #FFC107; border-radius: 8px; margin: 20px;';
+    infoDiv.innerHTML = `
+      <h3 style="color: #856404; margin-bottom: 10px;">📦 Projet Connecté</h3>
+      <p style="color: #856404;"><strong>Nom:</strong> ${projectInfo.name}</p>
+      <p style="color: #856404;"><strong>ID:</strong> ${projectInfo.id}</p>
+      <p style="color: #856404;"><strong>Région:</strong> ${projectInfo.location || 'N/A'}</p>
+      <p style="color: #856404; margin-top: 15px; font-size: 14px;">
+        ℹ️ Les métriques affichées sont des données de démonstration car l'accès direct aux données 
+        depuis GitHub Pages est bloqué par CORS. Pour accéder aux vraies données, l'extension doit 
+        être hébergée sur un domaine approuvé par Trimble ou utiliser un backend proxy.
+      </p>
+    `;
+    appContainer.insertBefore(infoDiv, appContainer.firstChild);
+  }
+
+  logger.info('✅ Extension ready in integrated mode (with project info)!');
 }
 
 /**
