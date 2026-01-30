@@ -1,0 +1,12 @@
+# Configuration GitHub Pages pour Trimble Dashboard Extension
+
+# Inclure le fichier manifest.json explicitement
+include:
+  - public/manifest.json
+
+# Configurer les types MIME
+defaults:
+  - scope:
+      path: "*.json"
+    values:
+      content-type: "application/json"

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Manifest Trimble Connect</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #005F9E;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Test de Chargement du Manifest Trimble Connect</h1>
+    <h2>Résultat :</h2>
+    <pre id="result">Chargement en cours...</pre>
+    
+    <script>
+        console.log('Début du test...');
+        
+        fetch('./manifest.json')
+            .then(response => {
+                console.log('Status:', response.status);
+                console.log('Content-Type:', response.headers.get('content-type'));
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('result').innerHTML = 
+                    '<span class="success">✅ Manifest valide !</span>\n\n' +
+                    JSON.stringify(data, null, 2);
+                console.log('✅ Manifest valide:', data);
+            })
+            .catch(err => {
+                document.getElementById('result').innerHTML = 
+                    '<span class="error">❌ Erreur de chargement</span>\n\n' +
+                    'Message: ' + err.message + '\n\n' +
+                    'Vérifiez la console pour plus de détails (F12)';
+                console.error('❌ Erreur:', err);
+            });
+    </script>
+</body>
+</html>
