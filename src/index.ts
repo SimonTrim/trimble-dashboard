@@ -124,12 +124,11 @@ async function initializeIntegrated(): Promise<void> {
     });
   }
 
-  // Étape 3: Créer l'adaptateur avec la région correcte
-  logger.info('🔄 Creating WorkspaceAPI adapter with regional URL...');
+  // Étape 3: Créer l'adaptateur
+  logger.info('🔄 Creating WorkspaceAPI adapter...');
   const apiAdapter = createWorkspaceAPIAdapter(
     workspaceAPI, 
-    projectId!,
-    projectInfo.location // Passer la région (europe, us, asia, etc.)
+    projectId!
   );
   
   // Initialiser le TrimbleClient avec l'adaptateur

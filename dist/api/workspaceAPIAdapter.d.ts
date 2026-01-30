@@ -1,15 +1,22 @@
 /**
- * Adaptateur pour transformer le WorkspaceAPI en interface compatible avec nos services
- * Permet d'utiliser les vraies données du projet Trimble Connect
+ * Adaptateur pour utiliser TrimbleConnectWorkspace API
+ * Documentation: https://app.connect.trimble.com/tc/app/5.0.0/doc/
+ *
+ * ⚠️ IMPORTANT: Utiliser UNIQUEMENT les méthodes natives de l'API
+ * NE JAMAIS faire d'appels fetch() directs - ils sont bloqués par CORS
  */
 import { ProjectFile, TrimbleNote, BCFTopic, ProjectView } from '../models/types';
-interface WorkspaceAPIInstance {
+interface TrimbleWorkspaceAPI {
     ui: {
         setMenu: (menu: any) => void;
         setActiveMenuItem: (command: string) => void;
     };
     project: {
         getCurrentProject: () => Promise<any>;
+        getFiles?: () => Promise<any[]>;
+        getViews?: () => Promise<any[]>;
+        getTodos?: () => Promise<any[]>;
+        getBCFTopics?: () => Promise<any[]>;
     };
     user: {
         getUserSettings: () => Promise<any>;
@@ -24,21 +31,7 @@ interface WorkspaceAPIInstance {
 export declare class WorkspaceAPIAdapter {
     private workspaceAPI;
     private projectId;
-    private baseUrl;
-    private projectLocation;
-    constructor(workspaceAPI: WorkspaceAPIInstance, projectId: string, projectLocation?: string);
-    /**
-     * Obtenir l'URL de l'API selon la région
-     */
-    private getRegionalApiUrl;
-    /**
-     * IMPORTANT: NE PAS utiliser fetch() - Bloqué par CORS !
-     * À la place, utiliser UNIQUEMENT les méthodes natives du WorkspaceAPI
-     *
-     * Les appels REST directs depuis GitHub Pages vers l'API Trimble Connect
-     * sont bloqués par CORS. Le WorkspaceAPI expose des méthodes natives qui
-     * fonctionnent dans le contexte de l'iframe.
-     */
+    constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string);
     /**
      * Interface compatible avec notre code existant
      */
@@ -46,7 +39,7 @@ export declare class WorkspaceAPIAdapter {
         get: () => Promise<any>;
     };
     /**
-     * API des fichiers - Utilise les méthodes WorkspaceAPI natives
+     * API des fichiers - Utilise project.getFiles()
      */
     get files(): {
         getAll: () => Promise<ProjectFile[]>;
@@ -56,20 +49,20 @@ export declare class WorkspaceAPIAdapter {
         }) => Promise<ProjectFile[]>;
     };
     /**
-     * API des notes - Utilise les méthodes WorkspaceAPI natives
+     * API des notes (Todos) - Utilise project.getTodos()
      */
     get notes(): {
         getAll: () => Promise<TrimbleNote[]>;
         get: (id: string) => Promise<TrimbleNote | null>;
     };
     /**
-     * API des BCF Topics - Utilise les méthodes WorkspaceAPI natives
+     * API des BCF Topics - Utilise project.getBCFTopics()
      */
     get bcf(): {
         getTopics: () => Promise<BCFTopic[]>;
     };
     /**
-     * API des vues - Utilise les méthodes WorkspaceAPI natives
+     * API des vues - Utilise project.getViews()
      */
     get views(): {
         getAll: () => Promise<ProjectView[]>;
@@ -77,8 +70,8 @@ export declare class WorkspaceAPIAdapter {
     };
 }
 /**
- * Créer un adaptateur à partir du WorkspaceAPI
+ * Créer un adaptateur à partir du TrimbleConnectWorkspace API
  */
-export declare function createWorkspaceAPIAdapter(workspaceAPI: WorkspaceAPIInstance, projectId: string, projectLocation?: string): any;
+export declare function createWorkspaceAPIAdapter(workspaceAPI: TrimbleWorkspaceAPI, projectId: string): any;
 export {};
 //# sourceMappingURL=workspaceAPIAdapter.d.ts.map
