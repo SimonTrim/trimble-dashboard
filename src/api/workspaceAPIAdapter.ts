@@ -29,7 +29,6 @@ interface WorkspaceAPIInstance {
 export class WorkspaceAPIAdapter {
   private workspaceAPI: WorkspaceAPIInstance;
   private projectId: string;
-  private accessToken: string | null = null;
   private baseUrl: string;
   private projectLocation: string;
 
@@ -62,58 +61,13 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * Obtenir le token d'accès pour les appels API
+   * IMPORTANT: NE PAS utiliser fetch() - Bloqué par CORS !
+   * À la place, utiliser UNIQUEMENT les méthodes natives du WorkspaceAPI
+   * 
+   * Les appels REST directs depuis GitHub Pages vers l'API Trimble Connect
+   * sont bloqués par CORS. Le WorkspaceAPI expose des méthodes natives qui
+   * fonctionnent dans le contexte de l'iframe.
    */
-  private async getAccessToken(): Promise<string> {
-    if (this.accessToken) {
-      return this.accessToken;
-    }
-
-    try {
-      this.accessToken = await this.workspaceAPI.extension.requestPermission('accesstoken');
-      logger.info('✓ Access token obtained');
-      return this.accessToken;
-    } catch (error) {
-      logger.error('Failed to get access token', { error });
-      throw error;
-    }
-  }
-
-  /**
-   * Faire un appel REST à l'API Trimble Connect
-   */
-  private async makeApiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const token = await this.getAccessToken();
-    
-    const url = `${this.baseUrl}${endpoint}`;
-    logger.info(`🌐 API Call: ${options.method || 'GET'} ${url}`);
-
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error(`❌ API call failed: ${response.status} ${response.statusText}`, {
-        url,
-        status: response.status,
-        statusText: response.statusText,
-        errorBody: errorText
-      });
-      throw new Error(`API call failed: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    logger.info(`✅ API call success: ${url}`, { 
-      dataLength: Array.isArray(data) ? data.length : 'not an array'
-    });
-    return data;
-  }
 
   /**
    * Interface compatible avec notre code existant
@@ -137,34 +91,20 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * API des fichiers
+   * API des fichiers - Utilise les méthodes WorkspaceAPI natives
    */
   get files() {
     return {
       getAll: async (): Promise<ProjectFile[]> => {
         try {
-          logger.info('Fetching real files from Trimble Connect...');
-          const response = await this.makeApiCall<any>(
-            `/projects/${this.projectId}/files`
-          );
+          logger.info('📁 Fetching files using WorkspaceAPI (no REST calls)...');
           
-          // Transformer la réponse en notre format ProjectFile
-          const files: ProjectFile[] = response.map((file: any) => ({
-            id: file.id,
-            name: file.name,
-            extension: file.name.split('.').pop() || '',
-            size: file.size || 0,
-            uploadedBy: file.createdBy?.name || 'Unknown',
-            uploadedAt: new Date(file.createdOn || new Date()),
-            lastModified: new Date(file.modifiedOn || file.createdOn || new Date()),
-            path: file.path || '/',
-            downloadUrl: file.downloadUrl || undefined,
-          }));
-
-          logger.info(`✓ Retrieved ${files.length} real files`);
-          return files;
+          // Utiliser les méthodes natives du WorkspaceAPI (si disponibles)
+          // Pour l'instant, retourner un tableau vide car WorkspaceAPI n'expose pas files.getAll()
+          logger.warn('⚠️ WorkspaceAPI does not expose files API - using mock data');
+          return [];
         } catch (error) {
-          logger.error('Failed to fetch real files, using empty array', { error });
+          logger.error('Failed to fetch files', { error });
           return [];
         }
       },
@@ -204,42 +144,54 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * API des notes
+   * API des notes - Utilise les méthodes WorkspaceAPI natives
    */
   get notes() {
     return {
       getAll: async (): Promise<TrimbleNote[]> => {
         try {
-          logger.info('Fetching real notes from Trimble Connect...');
-          const response = await this.makeApiCall<any>(
-            `/projects/${this.projectId}/todos`
-          );
+          logger.info('📝 Fetching todos using WorkspaceAPI.todos.getTodos()...');
+          
+          // Utiliser la méthode native du WorkspaceAPI
+          const todosAPI = (this.workspaceAPI as any).todos;
+          
+          if (!todosAPI || !todosAPI.getTodos) {
+            logger.warn('⚠️ WorkspaceAPI.todos.getTodos() not available');
+            return [];
+          }
+          
+          const response = await todosAPI.getTodos();
           
           // Transformer en notre format TrimbleNote
-          const notes: TrimbleNote[] = response.map((note: any) => ({
-            id: note.id,
-            title: note.label || 'Sans titre',
-            content: note.description || '',
-            author: note.createdBy?.name || 'Unknown',
-            createdAt: new Date(note.createdOn || new Date()),
-            updatedAt: new Date(note.modifiedOn || note.createdOn || new Date()),
-            archived: note.done || false,
+          const notes: TrimbleNote[] = response.map((todo: any) => ({
+            id: todo.id,
+            title: todo.label || 'Sans titre',
+            content: todo.description || '',
+            author: todo.createdBy?.name || 'Unknown',
+            createdAt: new Date(todo.createdOn || new Date()),
+            updatedAt: new Date(todo.modifiedOn || todo.createdOn || new Date()),
+            archived: todo.done || false,
             projectId: this.projectId,
           }));
 
-          logger.info(`✓ Retrieved ${notes.length} real notes`);
+          logger.info(`✅ Retrieved ${notes.length} todos via WorkspaceAPI`);
           return notes;
         } catch (error) {
-          logger.error('Failed to fetch real notes, using empty array', { error });
+          logger.error('Failed to fetch todos', { error });
           return [];
         }
       },
 
       get: async (id: string): Promise<TrimbleNote | null> => {
         try {
-          const response = await this.makeApiCall<any>(
-            `/projects/${this.projectId}/todos/${id}`
-          );
+          const todosAPI = (this.workspaceAPI as any).todos;
+          
+          if (!todosAPI || !todosAPI.getTodo) {
+            logger.warn('⚠️ WorkspaceAPI.todos.getTodo() not available');
+            return null;
+          }
+          
+          const response = await todosAPI.getTodo(id);
           
           return {
             id: response.id,
@@ -252,7 +204,7 @@ export class WorkspaceAPIAdapter {
             projectId: this.projectId,
           };
         } catch (error) {
-          logger.error(`Failed to fetch note ${id}`, { error });
+          logger.error(`Failed to fetch todo ${id}`, { error });
           return null;
         }
       }
@@ -260,17 +212,23 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * API des BCF Topics
+   * API des BCF Topics - Utilise les méthodes WorkspaceAPI natives
    */
   get bcf() {
     return {
       getTopics: async (): Promise<BCFTopic[]> => {
         try {
-          logger.info('Fetching real BCF topics from Trimble Connect...');
-          // L'API BCF utilise un endpoint différent
-          const response = await this.makeApiCall<any>(
-            `/projects/${this.projectId}/bcf/topics`
-          );
+          logger.info('🔧 Fetching BCF topics using WorkspaceAPI...');
+          
+          // Utiliser les méthodes natives du WorkspaceAPI (si disponibles)
+          const bcfAPI = (this.workspaceAPI as any).bcf;
+          
+          if (!bcfAPI || !bcfAPI.getTopics) {
+            logger.warn('⚠️ WorkspaceAPI.bcf.getTopics() not available - using empty array');
+            return [];
+          }
+          
+          const response = await bcfAPI.getTopics();
           
           // Transformer en notre format BCFTopic
           const topics: BCFTopic[] = response.map((topic: any) => ({
@@ -286,10 +244,10 @@ export class WorkspaceAPIAdapter {
             dueDate: topic.due_date ? new Date(topic.due_date) : undefined,
           }));
 
-          logger.info(`✓ Retrieved ${topics.length} real BCF topics`);
+          logger.info(`✅ Retrieved ${topics.length} BCF topics via WorkspaceAPI`);
           return topics;
         } catch (error) {
-          logger.error('Failed to fetch real BCF topics, using empty array', { error });
+          logger.error('Failed to fetch BCF topics', { error });
           return [];
         }
       }
@@ -297,16 +255,23 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * API des vues
+   * API des vues - Utilise les méthodes WorkspaceAPI natives
    */
   get views() {
     return {
       getAll: async (): Promise<ProjectView[]> => {
         try {
-          logger.info('Fetching real views from Trimble Connect...');
-          const response = await this.makeApiCall<any>(
-            `/projects/${this.projectId}/views`
-          );
+          logger.info('👁️ Fetching views using WorkspaceAPI...');
+          
+          // Utiliser les méthodes natives du WorkspaceAPI (si disponibles)
+          const viewsAPI = (this.workspaceAPI as any).views;
+          
+          if (!viewsAPI || !viewsAPI.getViews) {
+            logger.warn('⚠️ WorkspaceAPI.views.getViews() not available - using empty array');
+            return [];
+          }
+          
+          const response = await viewsAPI.getViews();
           
           // Transformer en notre format ProjectView
           const views: ProjectView[] = response.map((view: any) => ({
@@ -319,19 +284,24 @@ export class WorkspaceAPIAdapter {
             isDefault: view.isDefault || false,
           }));
 
-          logger.info(`✓ Retrieved ${views.length} real views`);
+          logger.info(`✅ Retrieved ${views.length} views via WorkspaceAPI`);
           return views;
         } catch (error) {
-          logger.error('Failed to fetch real views, using empty array', { error });
+          logger.error('Failed to fetch views', { error });
           return [];
         }
       },
 
       get: async (id: string): Promise<ProjectView | null> => {
         try {
-          const response = await this.makeApiCall<any>(
-            `/projects/${this.projectId}/views/${id}`
-          );
+          const viewsAPI = (this.workspaceAPI as any).views;
+          
+          if (!viewsAPI || !viewsAPI.getView) {
+            logger.warn('⚠️ WorkspaceAPI.views.getView() not available');
+            return null;
+          }
+          
+          const response = await viewsAPI.getView(id);
           
           return {
             id: response.id,

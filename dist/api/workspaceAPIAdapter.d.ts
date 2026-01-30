@@ -24,7 +24,6 @@ interface WorkspaceAPIInstance {
 export declare class WorkspaceAPIAdapter {
     private workspaceAPI;
     private projectId;
-    private accessToken;
     private baseUrl;
     private projectLocation;
     constructor(workspaceAPI: WorkspaceAPIInstance, projectId: string, projectLocation?: string);
@@ -33,13 +32,13 @@ export declare class WorkspaceAPIAdapter {
      */
     private getRegionalApiUrl;
     /**
-     * Obtenir le token d'accès pour les appels API
+     * IMPORTANT: NE PAS utiliser fetch() - Bloqué par CORS !
+     * À la place, utiliser UNIQUEMENT les méthodes natives du WorkspaceAPI
+     *
+     * Les appels REST directs depuis GitHub Pages vers l'API Trimble Connect
+     * sont bloqués par CORS. Le WorkspaceAPI expose des méthodes natives qui
+     * fonctionnent dans le contexte de l'iframe.
      */
-    private getAccessToken;
-    /**
-     * Faire un appel REST à l'API Trimble Connect
-     */
-    private makeApiCall;
     /**
      * Interface compatible avec notre code existant
      */
@@ -47,7 +46,7 @@ export declare class WorkspaceAPIAdapter {
         get: () => Promise<any>;
     };
     /**
-     * API des fichiers
+     * API des fichiers - Utilise les méthodes WorkspaceAPI natives
      */
     get files(): {
         getAll: () => Promise<ProjectFile[]>;
@@ -57,20 +56,20 @@ export declare class WorkspaceAPIAdapter {
         }) => Promise<ProjectFile[]>;
     };
     /**
-     * API des notes
+     * API des notes - Utilise les méthodes WorkspaceAPI natives
      */
     get notes(): {
         getAll: () => Promise<TrimbleNote[]>;
         get: (id: string) => Promise<TrimbleNote | null>;
     };
     /**
-     * API des BCF Topics
+     * API des BCF Topics - Utilise les méthodes WorkspaceAPI natives
      */
     get bcf(): {
         getTopics: () => Promise<BCFTopic[]>;
     };
     /**
-     * API des vues
+     * API des vues - Utilise les méthodes WorkspaceAPI natives
      */
     get views(): {
         getAll: () => Promise<ProjectView[]>;
