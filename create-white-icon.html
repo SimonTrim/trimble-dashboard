@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create White Icon</title>
+</head>
+<body>
+    <canvas id="canvas" width="48" height="48"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Fond transparent
+        ctx.clearRect(0, 0, 48, 48);
+        
+        // Dessiner l'icône en blanc
+        ctx.fillStyle = '#FFFFFF';
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.5;
+        
+        // Grille de 4 carrés + 1 barre
+        // Ligne 1
+        ctx.fillRect(6, 6, 16, 12);
+        ctx.fillRect(26, 6, 16, 12);
+        
+        // Ligne 2
+        ctx.fillRect(6, 22, 16, 12);
+        ctx.fillRect(26, 22, 16, 12);
+        
+        // Barre du bas
+        ctx.fillRect(6, 38, 36, 6);
+        
+        // Télécharger l'image
+        setTimeout(() => {
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'icon-white-48.png';
+                a.click();
+            });
+        }, 100);
+    </script>
+    <p>L'icône devrait se télécharger automatiquement...</p>
+</body>
+</html>
