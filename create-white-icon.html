@@ -1,45 +1,60 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Create White Icon</title>
+    <title>Créer Icône Blanche</title>
 </head>
 <body>
-    <canvas id="canvas" width="48" height="48"></canvas>
+    <h1>Générateur d'Icône Blanche pour Trimble</h1>
+    <canvas id="canvas" width="48" height="48" style="border: 1px solid #ccc;"></canvas>
+    <br><br>
+    <button onclick="downloadIcon()">Télécharger icon-white-48.png</button>
+    
     <script>
+        // Créer une icône de dashboard blanche
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         
         // Fond transparent
         ctx.clearRect(0, 0, 48, 48);
         
-        // Dessiner l'icône en blanc
-        ctx.fillStyle = '#FFFFFF';
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 1.5;
+        // Dessiner un dashboard en blanc (4 carrés)
+        ctx.fillStyle = 'white';
         
-        // Grille de 4 carrés + 1 barre
-        // Ligne 1
-        ctx.fillRect(6, 6, 16, 12);
-        ctx.fillRect(26, 6, 16, 12);
+        // Carré supérieur gauche
+        ctx.fillRect(6, 6, 16, 16);
         
-        // Ligne 2
-        ctx.fillRect(6, 22, 16, 12);
-        ctx.fillRect(26, 22, 16, 12);
+        // Carré supérieur droit
+        ctx.fillRect(26, 6, 16, 16);
         
-        // Barre du bas
-        ctx.fillRect(6, 38, 36, 6);
+        // Carré inférieur gauche
+        ctx.fillRect(6, 26, 16, 16);
         
-        // Télécharger l'image
-        setTimeout(() => {
-            canvas.toBlob((blob) => {
+        // Carré inférieur droit
+        ctx.fillRect(26, 26, 16, 16);
+        
+        // Ajouter un graphique en bleu Trimble dans le premier carré
+        ctx.fillStyle = '#005F9E';
+        ctx.fillRect(9, 14, 2, 5);
+        ctx.fillRect(12, 11, 2, 8);
+        ctx.fillRect(15, 13, 2, 6);
+        ctx.fillRect(18, 10, 2, 9);
+        
+        function downloadIcon() {
+            canvas.toBlob(function(blob) {
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'icon-white-48.png';
-                a.click();
+                const link = document.createElement('a');
+                link.download = 'icon-white-48.png';
+                link.href = url;
+                link.click();
             });
-        }, 100);
+        }
     </script>
-    <p>L'icône devrait se télécharger automatiquement...</p>
+    
+    <p style="margin-top: 20px; color: #666;">
+        1. Clique sur "Télécharger"<br>
+        2. Renomme le fichier en "icon-white-48.png" si nécessaire<br>
+        3. Place-le dans le dossier public/<br>
+        4. Commit et push sur GitHub
+    </p>
 </body>
 </html>
