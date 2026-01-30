@@ -36,20 +36,16 @@ let isStandaloneMode = false;
  * Détecter si nous sommes en mode standalone (lien direct) ou intégré (iframe Trimble Connect)
  */
 function isRunningInTrimbleConnect(): boolean {
-  try {
-    // Vérifier si nous sommes dans un iframe
-    if (window.self === window.parent) {
-      return false; // Pas dans un iframe
-    }
-    
-    // Vérifier si window.parent est accessible (pas de cross-origin block)
-    // Si on peut accéder à window.parent.location, on est dans Trimble Connect
-    void window.parent.location.href;
+  // Si nous sommes dans un iframe, nous sommes dans Trimble Connect
+  // (Trimble Connect charge les extensions dans des iframes)
+  if (window.self !== window.parent) {
+    logger.info('Detected: Running in iframe (Trimble Connect)');
     return true;
-  } catch (e) {
-    // Cross-origin error = on est dans un iframe mais pas dans Trimble Connect
-    return false;
   }
+  
+  // Si pas dans un iframe, c'est un accès direct (standalone)
+  logger.info('Detected: Running standalone (direct access)');
+  return false;
 }
 
 /**
