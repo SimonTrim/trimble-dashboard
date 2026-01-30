@@ -1,0 +1,7 @@
+{
+  "name": "Trimble Dashboard",
+  "version": "1.0.0",
+  "trimbleConnectVersion": "1.0",
+  "main": "public/index.html",
+  "icon": "public/icon-48.png"
+}
