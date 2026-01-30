@@ -6,11 +6,11 @@
   "api": "1.0",
   "extensions": [
     {
-      "type": "panel",
-      "id": "dashboard-panel",
+      "type": "projectModule",
+      "id": "project-dashboard",
       "title": "Dashboard",
-      "icon": "icon-48.png",
-      "entryPoint": "../dist/index.js"
+      "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-48.png",
+      "url": "https://simontrim.github.io/trimble-dashboard/public/index.html"
     }
   ],
   "permissions": [
@@ -24,10 +24,10 @@
     "@trimble/connect-workspace-api": "^2.0.0"
   },
   "license": "MIT",
-  "homepage": "https://votre-site.com",
+  "homepage": "https://simontrim.github.io/trimble-dashboard",
   "repository": {
     "type": "git",
-    "url": "https://github.com/votre-repo/trimble-dashboard"
+    "url": "https://github.com/simonTrim/trimble-dashboard"
   },
   "keywords": [
     "trimble",
