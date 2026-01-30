@@ -1,13 +1,26 @@
 {
   "name": "Project Dashboard",
   "version": "1.0.0",
-  "trimbleConnectVersion": "1.0",
-  "author": "Trimble",
   "description": "Tableau de bord des métriques projet pour Trimble Connect - Visualisez vos Notes, BCF, Fichiers et Vues en temps réel",
-  "icon": "icon-48.png",
-  "main": "index.html",
+  "author": "Trimble",
+  "api": "1.0",
+  "extensions": [
+    {
+      "type": "panel",
+      "id": "dashboard-panel",
+      "title": "Dashboard",
+      "icon": "icon-48.png",
+      "entryPoint": "index.html"
+    }
+  ],
   "permissions": [
-    "read",
-    "write"
-  ]
+    "project.read",
+    "notes.read",
+    "bcf.read",
+    "files.read",
+    "views.read"
+  ],
+  "dependencies": {
+    "@trimble/connect-workspace-api": "^2.0.0"
+  }
 }
