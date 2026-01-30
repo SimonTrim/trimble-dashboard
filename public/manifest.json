@@ -6,11 +6,11 @@
   "api": "1.0",
   "extensions": [
     {
-      "type": "panel",
-      "id": "dashboard-panel",
+      "type": "projectModule",
+      "id": "project-dashboard",
       "title": "Dashboard",
       "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-48.png",
-      "entryPoint": "https://simontrim.github.io/trimble-dashboard/dist/index.js"
+      "url": "https://simontrim.github.io/trimble-dashboard/public/index.html"
     }
   ],
   "permissions": [
@@ -22,5 +22,19 @@
   ],
   "dependencies": {
     "@trimble/connect-workspace-api": "^2.0.0"
-  }
+  },
+  "license": "MIT",
+  "homepage": "https://simontrim.github.io/trimble-dashboard",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SimonTrim/trimble-dashboard"
+  },
+  "keywords": [
+    "trimble",
+    "connect",
+    "dashboard",
+    "metrics",
+    "bim",
+    "bcf"
+  ]
 }
