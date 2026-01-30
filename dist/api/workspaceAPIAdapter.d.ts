@@ -26,7 +26,12 @@ export declare class WorkspaceAPIAdapter {
     private projectId;
     private accessToken;
     private baseUrl;
-    constructor(workspaceAPI: WorkspaceAPIInstance, projectId: string);
+    private projectLocation;
+    constructor(workspaceAPI: WorkspaceAPIInstance, projectId: string, projectLocation?: string);
+    /**
+     * Obtenir l'URL de l'API selon la région
+     */
+    private getRegionalApiUrl;
     /**
      * Obtenir le token d'accès pour les appels API
      */
@@ -75,6 +80,6 @@ export declare class WorkspaceAPIAdapter {
 /**
  * Créer un adaptateur à partir du WorkspaceAPI
  */
-export declare function createWorkspaceAPIAdapter(workspaceAPI: WorkspaceAPIInstance, projectId: string): any;
+export declare function createWorkspaceAPIAdapter(workspaceAPI: WorkspaceAPIInstance, projectId: string, projectLocation?: string): any;
 export {};
 //# sourceMappingURL=workspaceAPIAdapter.d.ts.map

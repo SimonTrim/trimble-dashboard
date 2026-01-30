@@ -30,14 +30,35 @@ export class WorkspaceAPIAdapter {
   private workspaceAPI: WorkspaceAPIInstance;
   private projectId: string;
   private accessToken: string | null = null;
-  private baseUrl: string = 'https://app21.connect.trimble.com/tc/api/2.0'; // Region Europe
+  private baseUrl: string;
+  private projectLocation: string;
 
-  constructor(workspaceAPI: WorkspaceAPIInstance, projectId: string) {
+  constructor(workspaceAPI: WorkspaceAPIInstance, projectId: string, projectLocation?: string) {
     this.workspaceAPI = workspaceAPI;
     this.projectId = projectId;
+    this.projectLocation = projectLocation || 'us';
     
-    logger.warn('⚠️ WorkspaceAPIAdapter: REST API calls from iframe are blocked by CORS');
-    logger.warn('⚠️ Using mock data fallback until Trimble Connect provides direct API access');
+    // Déterminer l'URL de base selon la région du projet
+    this.baseUrl = this.getRegionalApiUrl(this.projectLocation);
+    
+    logger.info(`🌍 WorkspaceAPIAdapter initialized for region: ${this.projectLocation}`);
+    logger.info(`🔗 Using API URL: ${this.baseUrl}`);
+  }
+
+  /**
+   * Obtenir l'URL de l'API selon la région
+   */
+  private getRegionalApiUrl(location: string): string {
+    const regionUrls: Record<string, string> = {
+      'europe': 'https://app21.connect.trimble.com/tc/api/2.0',
+      'us': 'https://app.connect.trimble.com/tc/api/2.0',
+      'asia': 'https://app-asia.connect.trimble.com/tc/api/2.0',
+      'australia': 'https://app-au.connect.trimble.com/tc/api/2.0',
+    };
+    
+    const url = regionUrls[location.toLowerCase()] || regionUrls['us'];
+    logger.info(`📍 Region '${location}' mapped to: ${url}`);
+    return url;
   }
 
   /**
@@ -335,7 +356,8 @@ export class WorkspaceAPIAdapter {
  */
 export function createWorkspaceAPIAdapter(
   workspaceAPI: WorkspaceAPIInstance,
-  projectId: string
+  projectId: string,
+  projectLocation?: string
 ): any {
-  return new WorkspaceAPIAdapter(workspaceAPI, projectId);
+  return new WorkspaceAPIAdapter(workspaceAPI, projectId, projectLocation);
 }
