@@ -1,7 +1,40 @@
 {
-  "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-white.svg",
-  "title": "Project Dashboard",
-  "url": "https://simontrim.github.io/trimble-dashboard/public/index.html",
-  "description": "Tableau de bord des métriques projet - Notes, BCF, Fichiers, Vues",
-  "enabled": true
+  "name": "Project Dashboard",
+  "version": "1.0.0",
+  "description": "Tableau de bord des metriques projet pour Trimble Connect - Visualisez vos Notes, BCF, Fichiers et Vues en temps reel",
+  "author": "Votre Entreprise",
+  "api": "1.0",
+  "extensions": [
+    {
+      "type": "projectModule",
+      "id": "project-dashboard",
+      "title": "Dashboard",
+      "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-white.svg",
+      "url": "https://simontrim.github.io/trimble-dashboard/public/index.html"
+    }
+  ],
+  "permissions": [
+    "project.read",
+    "notes.read",
+    "bcf.read",
+    "files.read",
+    "views.read"
+  ],
+  "dependencies": {
+    "@trimble/connect-workspace-api": "^2.0.0"
+  },
+  "license": "MIT",
+  "homepage": "https://simontrim.github.io/trimble-dashboard",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SimonTrim/trimble-dashboard"
+  },
+  "keywords": [
+    "trimble",
+    "connect",
+    "dashboard",
+    "metrics",
+    "bim",
+    "bcf"
+  ]
 }
