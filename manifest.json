@@ -1,7 +1,7 @@
 {
-  "name": "Trimble Dashboard",
-  "version": "1.0.0",
-  "trimbleConnectVersion": "1.0",
-  "main": "public/index.html",
-  "icon": "public/icon-48.png"
+  "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-48.png",
+  "title": "Project Dashboard",
+  "url": "https://simontrim.github.io/trimble-dashboard/public/index.html",
+  "description": "Tableau de bord des metriques projet - Notes, BCF, Fichiers, Vues",
+  "enabled": true
 }

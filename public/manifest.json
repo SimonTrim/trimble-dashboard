@@ -1,16 +1,7 @@
 {
-  "name": "Trimble Dashboard",
-  "version": "1.0.0",
-  "trimbleConnectVersion": "1.0",
-  "author": "Simon Trimble",
-  "description": "Extension Dashboard pour Trimble Connect - Notes, BCF, Fichiers, Vues",
   "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-48.png",
-  "main": "https://simontrim.github.io/trimble-dashboard/public/index.html",
-  "permissions": [
-    "read",
-    "write"
-  ],
-  "api": {
-    "workspace": "1.0"
-  }
+  "title": "Project Dashboard",
+  "url": "https://simontrim.github.io/trimble-dashboard/public/index.html",
+  "description": "Tableau de bord des metriques projet - Notes, BCF, Fichiers, Vues",
+  "enabled": true
 }
