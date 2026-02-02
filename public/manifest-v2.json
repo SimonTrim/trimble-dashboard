@@ -1,7 +1,7 @@
 {
   "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-48.png",
-  "title": "Project Dashboard - TEST API",
-  "url": "https://simontrim.github.io/trimble-dashboard/public/index.html",
-  "description": "TEST des méthodes disponibles dans Workspace API",
+  "title": "Project Dashboard v2",
+  "url": "https://simontrim.github.io/trimble-dashboard/public/index.html?v=2",
+  "description": "Dashboard avec logs de debug Workspace API",
   "enabled": true
 }
