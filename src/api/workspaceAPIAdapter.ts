@@ -1,15 +1,20 @@
 /**
- * Adaptateur pour utiliser TrimbleConnectWorkspace API
- * Documentation: https://app.connect.trimble.com/tc/app/5.0.0/doc/
+ * Adaptateur pour utiliser TrimbleConnectWorkspace API + REST API
  * 
- * ⚠️ IMPORTANT: Utiliser UNIQUEMENT les méthodes natives de l'API
- * NE JAMAIS faire d'appels fetch() directs - ils sont bloqués par CORS
+ * ARCHITECTURE:
+ * - WorkspaceAPI: getCurrentProject(), getUserSettings(), setMenu()
+ * - REST API: Fichiers, Todos, BCF Topics, Views (avec token d'accès)
+ * 
+ * Documentation:
+ * - WorkspaceAPI: https://components.connect.trimble.com/trimble-connect-workspace-api/
+ * - Core API (Files/Todos/Views): https://developer.trimble.com/docs/connect/core
+ * - Topics API (BCF): https://developer.trimble.com/docs/connect/tools/api/topics/
  */
 
 import { ProjectFile, TrimbleNote, BCFTopic, ProjectView } from '../models/types';
 import { logger } from '../utils/logger';
 
-// Interface du TrimbleConnectWorkspace API
+// Interface du TrimbleConnectWorkspace API (méthodes natives UNIQUEMENT)
 interface TrimbleWorkspaceAPI {
   ui: {
     setMenu: (menu: any) => void;
@@ -17,10 +22,9 @@ interface TrimbleWorkspaceAPI {
   };
   project: {
     getCurrentProject: () => Promise<any>;
-    getFiles?: () => Promise<any[]>;
-    getViews?: () => Promise<any[]>;
-    getTodos?: () => Promise<any[]>;
-    getBCFTopics?: () => Promise<any[]>;
+    getProject?: () => Promise<any>;
+    getMembers?: () => Promise<any[]>;
+    getSettings?: () => Promise<any>;
   };
   user: {
     getUserSettings: () => Promise<any>;
@@ -36,12 +40,92 @@ interface TrimbleWorkspaceAPI {
 export class WorkspaceAPIAdapter {
   private workspaceAPI: TrimbleWorkspaceAPI;
   private projectId: string;
+  private projectLocation: string;
+  private baseUrl: string;
+  private accessToken: string | null = null;
 
-  constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string) {
+  constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string) {
     this.workspaceAPI = workspaceAPI;
     this.projectId = projectId;
+    this.projectLocation = projectLocation || 'us';
+    
+    // Déterminer l'URL de base selon la région du projet
+    this.baseUrl = this.getRegionalApiUrl(this.projectLocation);
     
     logger.info(`✅ WorkspaceAPIAdapter initialized for project: ${projectId}`);
+    logger.info(`🌍 Region: ${this.projectLocation} → API URL: ${this.baseUrl}`);
+  }
+
+  /**
+   * Obtenir l'URL de l'API selon la région
+   */
+  private getRegionalApiUrl(location: string): string {
+    const regionUrls: Record<string, string> = {
+      'europe': 'https://app21.connect.trimble.com/tc/api/2.0',
+      'us': 'https://app.connect.trimble.com/tc/api/2.0',
+      'asia': 'https://app-asia.connect.trimble.com/tc/api/2.0',
+      'australia': 'https://app-au.connect.trimble.com/tc/api/2.0',
+    };
+    
+    return regionUrls[location.toLowerCase()] || regionUrls['us'];
+  }
+
+  /**
+   * Obtenir le token d'accès (avec gestion du consentement utilisateur)
+   */
+  private async getAccessToken(): Promise<string> {
+    if (this.accessToken) {
+      return this.accessToken;
+    }
+
+    try {
+      logger.info('🔑 Requesting access token...');
+      const token = await this.workspaceAPI.extension.requestPermission('accesstoken');
+      
+      if (token === 'pending') {
+        logger.warn('⏳ Waiting for user consent...');
+        throw new Error('User consent required for access token');
+      }
+      
+      if (token === 'denied') {
+        logger.error('❌ User denied access token permission');
+        throw new Error('User denied access token permission');
+      }
+      
+      this.accessToken = token;
+      logger.info('✅ Access token obtained');
+      return token;
+    } catch (error) {
+      logger.error('Failed to get access token', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Faire un appel REST authentifié vers l'API Trimble Connect
+   */
+  private async fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    const token = await this.getAccessToken();
+    const url = `${this.baseUrl}${endpoint}`;
+    
+    logger.info(`🌐 API Request: ${options?.method || 'GET'} ${url}`);
+    
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error(`API Error ${response.status}: ${errorText}`);
+      throw new Error(`API Error ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
   }
 
   /**
@@ -66,37 +150,33 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * API des fichiers - Utilise project.getFiles()
+   * API des fichiers - Utilise REST API Core
+   * Endpoint: GET /projects/{projectId}/files
    */
   get files() {
     return {
       getAll: async (): Promise<ProjectFile[]> => {
         try {
-          logger.info('📁 Fetching files via TrimbleConnectWorkspace.project.getFiles()...');
+          logger.info('📁 Fetching files via REST API /projects/{projectId}/files...');
           
-          if (!this.workspaceAPI.project.getFiles) {
-            logger.warn('⚠️ project.getFiles() not available in this API version');
-            return [];
-          }
+          const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/files`);
           
-          const rawFiles = await this.workspaceAPI.project.getFiles();
-          
-          const files: ProjectFile[] = rawFiles.map((file: any) => ({
-            id: file.id || file.fileId,
-            name: file.name || file.fileName || 'Unknown',
+          const files: ProjectFile[] = response.map((file: any) => ({
+            id: file.id,
+            name: file.name || 'Unknown',
             extension: (file.name || '').split('.').pop() || '',
-            size: file.size || file.fileSize || 0,
-            uploadedBy: file.createdBy?.name || file.author || 'Unknown',
-            uploadedAt: new Date(file.createdOn || file.uploadDate || new Date()),
-            lastModified: new Date(file.modifiedOn || file.lastModified || file.createdOn || new Date()),
-            path: file.path || file.folderPath || '/',
+            size: file.size || 0,
+            uploadedBy: file.createdBy?.name || 'Unknown',
+            uploadedAt: new Date(file.createdOn || new Date()),
+            lastModified: new Date(file.modifiedOn || file.createdOn || new Date()),
+            path: file.parentPath || '/',
             downloadUrl: file.downloadUrl || undefined,
           }));
 
-          logger.info(`✅ Retrieved ${files.length} files from TrimbleConnectWorkspace`);
+          logger.info(`✅ Retrieved ${files.length} files from REST API`);
           return files;
         } catch (error) {
-          logger.error('Failed to fetch files from TrimbleConnectWorkspace', { error });
+          logger.error('Failed to fetch files from REST API', { error });
           return [];
         }
       },
@@ -136,37 +216,33 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * API des notes (Todos) - Utilise project.getTodos()
+   * API des notes (Todos) - Utilise REST API Core
+   * Endpoint: GET /projects/{projectId}/todos
    */
   get notes() {
     return {
       getAll: async (): Promise<TrimbleNote[]> => {
         try {
-          logger.info('📝 Fetching todos via TrimbleConnectWorkspace.project.getTodos()...');
+          logger.info('📝 Fetching todos via REST API /projects/{projectId}/todos...');
           
-          if (!this.workspaceAPI.project.getTodos) {
-            logger.warn('⚠️ project.getTodos() not available in this API version');
-            return [];
-          }
-          
-          const rawTodos = await this.workspaceAPI.project.getTodos();
+          const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/todos`);
           
           // Transformer en notre format TrimbleNote
-          const notes: TrimbleNote[] = rawTodos.map((todo: any) => ({
-            id: todo.id || todo.todoId,
+          const notes: TrimbleNote[] = response.map((todo: any) => ({
+            id: todo.id,
             title: todo.label || todo.title || 'Sans titre',
             content: todo.description || '',
-            author: todo.createdBy?.name || todo.author || 'Unknown',
-            createdAt: new Date(todo.createdOn || todo.createdDate || new Date()),
-            updatedAt: new Date(todo.modifiedOn || todo.modifiedDate || todo.createdOn || new Date()),
-            archived: todo.done || todo.completed || false,
+            author: todo.createdBy?.name || 'Unknown',
+            createdAt: new Date(todo.createdOn || new Date()),
+            updatedAt: new Date(todo.modifiedOn || todo.createdOn || new Date()),
+            archived: todo.done || false,
             projectId: this.projectId,
           }));
 
-          logger.info(`✅ Retrieved ${notes.length} todos from TrimbleConnectWorkspace`);
+          logger.info(`✅ Retrieved ${notes.length} todos from REST API`);
           return notes;
         } catch (error) {
-          logger.error('Failed to fetch todos from TrimbleConnectWorkspace', { error });
+          logger.error('Failed to fetch todos from REST API', { error });
           return [];
         }
       },
@@ -186,39 +262,35 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * API des BCF Topics - Utilise project.getBCFTopics()
+   * API des BCF Topics - Utilise REST API Topics (BCF 2.1/3.0)
+   * Endpoint: GET /projects/{projectId}/topics
    */
   get bcf() {
     return {
       getTopics: async (): Promise<BCFTopic[]> => {
         try {
-          logger.info('🔧 Fetching BCF topics via TrimbleConnectWorkspace.project.getBCFTopics()...');
+          logger.info('🔧 Fetching BCF topics via REST API /projects/{projectId}/topics...');
           
-          if (!this.workspaceAPI.project.getBCFTopics) {
-            logger.warn('⚠️ project.getBCFTopics() not available in this API version');
-            return [];
-          }
-          
-          const rawTopics = await this.workspaceAPI.project.getBCFTopics();
+          const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/topics`);
           
           // Transformer en notre format BCFTopic
-          const topics: BCFTopic[] = rawTopics.map((topic: any) => ({
-            id: topic.guid || topic.id,
+          const topics: BCFTopic[] = response.map((topic: any) => ({
+            id: topic.guid,
             title: topic.title || 'Sans titre',
             description: topic.description || '',
-            status: topic.topic_status || topic.status || 'Open',
+            status: topic.topic_status || 'Open',
             priority: topic.priority || 'Medium',
-            assignedTo: topic.assigned_to || topic.assignedTo || undefined,
-            createdBy: topic.creation_author || topic.createdBy || 'Unknown',
-            createdAt: new Date(topic.creation_date || topic.createdDate || new Date()),
-            modifiedAt: new Date(topic.modified_date || topic.modifiedDate || topic.creation_date || new Date()),
+            assignedTo: topic.assigned_to || undefined,
+            createdBy: topic.creation_author || 'Unknown',
+            createdAt: new Date(topic.creation_date || new Date()),
+            modifiedAt: new Date(topic.modified_date || topic.creation_date || new Date()),
             dueDate: topic.due_date ? new Date(topic.due_date) : undefined,
           }));
 
-          logger.info(`✅ Retrieved ${topics.length} BCF topics from TrimbleConnectWorkspace`);
+          logger.info(`✅ Retrieved ${topics.length} BCF topics from REST API`);
           return topics;
         } catch (error) {
-          logger.error('Failed to fetch BCF topics from TrimbleConnectWorkspace', { error });
+          logger.error('Failed to fetch BCF topics from REST API', { error });
           return [];
         }
       }
@@ -226,36 +298,32 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * API des vues - Utilise project.getViews()
+   * API des vues - Utilise REST API Core
+   * Endpoint: GET /projects/{projectId}/views
    */
   get views() {
     return {
       getAll: async (): Promise<ProjectView[]> => {
         try {
-          logger.info('👁️ Fetching views via TrimbleConnectWorkspace.project.getViews()...');
+          logger.info('👁️ Fetching views via REST API /projects/{projectId}/views...');
           
-          if (!this.workspaceAPI.project.getViews) {
-            logger.warn('⚠️ project.getViews() not available in this API version');
-            return [];
-          }
-          
-          const rawViews = await this.workspaceAPI.project.getViews();
+          const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/views`);
           
           // Transformer en notre format ProjectView
-          const views: ProjectView[] = rawViews.map((view: any) => ({
-            id: view.id || view.viewId,
-            name: view.name || view.viewName || 'Sans nom',
+          const views: ProjectView[] = response.map((view: any) => ({
+            id: view.id,
+            name: view.name || 'Sans nom',
             description: view.description || undefined,
-            createdBy: view.createdBy?.name || view.author || 'Unknown',
-            createdAt: new Date(view.createdOn || view.createdDate || new Date()),
-            thumbnail: view.thumbnail || view.thumbnailUrl || undefined,
-            isDefault: view.isDefault || view.default || false,
+            createdBy: view.createdBy?.name || 'Unknown',
+            createdAt: new Date(view.createdOn || new Date()),
+            thumbnail: view.thumbnail || undefined,
+            isDefault: view.isDefault || false,
           }));
 
-          logger.info(`✅ Retrieved ${views.length} views from TrimbleConnectWorkspace`);
+          logger.info(`✅ Retrieved ${views.length} views from REST API`);
           return views;
         } catch (error) {
-          logger.error('Failed to fetch views from TrimbleConnectWorkspace', { error });
+          logger.error('Failed to fetch views from REST API', { error });
           return [];
         }
       },
@@ -280,7 +348,8 @@ export class WorkspaceAPIAdapter {
  */
 export function createWorkspaceAPIAdapter(
   workspaceAPI: TrimbleWorkspaceAPI,
-  projectId: string
+  projectId: string,
+  projectLocation?: string
 ): any {
-  return new WorkspaceAPIAdapter(workspaceAPI, projectId);
+  return new WorkspaceAPIAdapter(workspaceAPI, projectId, projectLocation);
 }

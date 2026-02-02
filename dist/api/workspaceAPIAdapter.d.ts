@@ -1,9 +1,14 @@
 /**
- * Adaptateur pour utiliser TrimbleConnectWorkspace API
- * Documentation: https://app.connect.trimble.com/tc/app/5.0.0/doc/
+ * Adaptateur pour utiliser TrimbleConnectWorkspace API + REST API
  *
- * ⚠️ IMPORTANT: Utiliser UNIQUEMENT les méthodes natives de l'API
- * NE JAMAIS faire d'appels fetch() directs - ils sont bloqués par CORS
+ * ARCHITECTURE:
+ * - WorkspaceAPI: getCurrentProject(), getUserSettings(), setMenu()
+ * - REST API: Fichiers, Todos, BCF Topics, Views (avec token d'accès)
+ *
+ * Documentation:
+ * - WorkspaceAPI: https://components.connect.trimble.com/trimble-connect-workspace-api/
+ * - Core API (Files/Todos/Views): https://developer.trimble.com/docs/connect/core
+ * - Topics API (BCF): https://developer.trimble.com/docs/connect/tools/api/topics/
  */
 import { ProjectFile, TrimbleNote, BCFTopic, ProjectView } from '../models/types';
 interface TrimbleWorkspaceAPI {
@@ -13,10 +18,9 @@ interface TrimbleWorkspaceAPI {
     };
     project: {
         getCurrentProject: () => Promise<any>;
-        getFiles?: () => Promise<any[]>;
-        getViews?: () => Promise<any[]>;
-        getTodos?: () => Promise<any[]>;
-        getBCFTopics?: () => Promise<any[]>;
+        getProject?: () => Promise<any>;
+        getMembers?: () => Promise<any[]>;
+        getSettings?: () => Promise<any>;
     };
     user: {
         getUserSettings: () => Promise<any>;
@@ -31,7 +35,22 @@ interface TrimbleWorkspaceAPI {
 export declare class WorkspaceAPIAdapter {
     private workspaceAPI;
     private projectId;
-    constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string);
+    private projectLocation;
+    private baseUrl;
+    private accessToken;
+    constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string);
+    /**
+     * Obtenir l'URL de l'API selon la région
+     */
+    private getRegionalApiUrl;
+    /**
+     * Obtenir le token d'accès (avec gestion du consentement utilisateur)
+     */
+    private getAccessToken;
+    /**
+     * Faire un appel REST authentifié vers l'API Trimble Connect
+     */
+    private fetchAPI;
     /**
      * Interface compatible avec notre code existant
      */
@@ -39,7 +58,8 @@ export declare class WorkspaceAPIAdapter {
         get: () => Promise<any>;
     };
     /**
-     * API des fichiers - Utilise project.getFiles()
+     * API des fichiers - Utilise REST API Core
+     * Endpoint: GET /projects/{projectId}/files
      */
     get files(): {
         getAll: () => Promise<ProjectFile[]>;
@@ -49,20 +69,23 @@ export declare class WorkspaceAPIAdapter {
         }) => Promise<ProjectFile[]>;
     };
     /**
-     * API des notes (Todos) - Utilise project.getTodos()
+     * API des notes (Todos) - Utilise REST API Core
+     * Endpoint: GET /projects/{projectId}/todos
      */
     get notes(): {
         getAll: () => Promise<TrimbleNote[]>;
         get: (id: string) => Promise<TrimbleNote | null>;
     };
     /**
-     * API des BCF Topics - Utilise project.getBCFTopics()
+     * API des BCF Topics - Utilise REST API Topics (BCF 2.1/3.0)
+     * Endpoint: GET /projects/{projectId}/topics
      */
     get bcf(): {
         getTopics: () => Promise<BCFTopic[]>;
     };
     /**
-     * API des vues - Utilise project.getViews()
+     * API des vues - Utilise REST API Core
+     * Endpoint: GET /projects/{projectId}/views
      */
     get views(): {
         getAll: () => Promise<ProjectView[]>;
@@ -72,6 +95,6 @@ export declare class WorkspaceAPIAdapter {
 /**
  * Créer un adaptateur à partir du TrimbleConnectWorkspace API
  */
-export declare function createWorkspaceAPIAdapter(workspaceAPI: TrimbleWorkspaceAPI, projectId: string): any;
+export declare function createWorkspaceAPIAdapter(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string): any;
 export {};
 //# sourceMappingURL=workspaceAPIAdapter.d.ts.map

@@ -122,17 +122,14 @@ async function initializeIntegrated(): Promise<void> {
       projectName: projectInfo.name,
       location: projectInfo.location 
     });
-    
-    // 🔍 DEBUG: Afficher toutes les méthodes disponibles dans workspaceAPI
-    logger.info('🔍 Available workspaceAPI.project methods:', Object.keys(workspaceAPI.project));
-    logger.info('🔍 workspaceAPI.project object:', workspaceAPI.project);
   }
 
-  // Étape 3: Créer l'adaptateur
-  logger.info('🔄 Creating WorkspaceAPI adapter...');
+  // Étape 3: Créer l'adaptateur avec la région
+  logger.info('🔄 Creating WorkspaceAPI adapter with regional REST API...');
   const apiAdapter = createWorkspaceAPIAdapter(
     workspaceAPI, 
-    projectId!
+    projectId!,
+    projectInfo.location // europe, us, asia, australia
   );
   
   // Initialiser le TrimbleClient avec l'adaptateur
