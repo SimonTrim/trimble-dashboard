@@ -122,6 +122,53 @@ async function initializeIntegrated(): Promise<void> {
       projectName: projectInfo.name,
       location: projectInfo.location 
     });
+
+    // 🔍 DEBUG: Afficher TOUTES les méthodes disponibles dans workspaceAPI
+    logger.info('═══════════════════════════════════════════');
+    logger.info('🔬 TEST WORKSPACE API - MÉTHODES DISPONIBLES');
+    logger.info('═══════════════════════════════════════════');
+    
+    logger.info('📋 Clés principales de workspaceAPI:', Object.keys(workspaceAPI));
+    
+    // Vérifier api.project
+    if (workspaceAPI.project) {
+      logger.info('✅ workspaceAPI.project existe');
+      logger.info('   Méthodes:', Object.keys(workspaceAPI.project));
+    }
+    
+    // Vérifier api.todos
+    if ((workspaceAPI as any).todos) {
+      logger.info('✅ workspaceAPI.todos EXISTE!');
+      logger.info('   Méthodes:', Object.keys((workspaceAPI as any).todos));
+    } else {
+      logger.error('❌ workspaceAPI.todos N\'EXISTE PAS');
+    }
+    
+    // Vérifier api.bcf
+    if ((workspaceAPI as any).bcf) {
+      logger.info('✅ workspaceAPI.bcf EXISTE!');
+      logger.info('   Méthodes:', Object.keys((workspaceAPI as any).bcf));
+    } else {
+      logger.error('❌ workspaceAPI.bcf N\'EXISTE PAS');
+    }
+    
+    // Vérifier api.views
+    if ((workspaceAPI as any).views) {
+      logger.info('✅ workspaceAPI.views EXISTE!');
+      logger.info('   Méthodes:', Object.keys((workspaceAPI as any).views));
+    } else {
+      logger.error('❌ workspaceAPI.views N\'EXISTE PAS');
+    }
+    
+    // Vérifier api.files
+    if ((workspaceAPI as any).files) {
+      logger.info('✅ workspaceAPI.files EXISTE!');
+      logger.info('   Méthodes:', Object.keys((workspaceAPI as any).files));
+    } else {
+      logger.error('❌ workspaceAPI.files N\'EXISTE PAS');
+    }
+    
+    logger.info('═══════════════════════════════════════════');
   }
 
   // Étape 3: Créer l'adaptateur avec la région
