@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Test Workspace API</title>
+  <style>
+    body {
+      font-family: 'Courier New', monospace;
+      background: #1e1e1e;
+      color: #00ff00;
+      padding: 20px;
+    }
+    .log {
+      background: #0a0a0a;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 10px 0;
+      border-left: 3px solid #00ff00;
+    }
+    .error {
+      border-left-color: #ff0000;
+      color: #ff6b6b;
+    }
+    .success {
+      border-left-color: #00ff00;
+      color: #51cf66;
+    }
+    .warning {
+      border-left-color: #ffd43b;
+      color: #ffd43b;
+    }
+    h1 {
+      color: #00d9ff;
+      text-align: center;
+    }
+    .test-section {
+      margin: 20px 0;
+      padding: 15px;
+      background: #2a2a2a;
+      border-radius: 5px;
+    }
+    .test-section h2 {
+      color: #ff9f43;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔬 TEST WORKSPACE API - Méthodes Disponibles</h1>
+  
+  <div class="test-section">
+    <h2>📋 État de la connexion</h2>
+    <div id="connection-status">En attente...</div>
+  </div>
+
+  <div class="test-section">
+    <h2>🔍 Méthodes disponibles dans api.todos</h2>
+    <div id="todos-methods">En cours de test...</div>
+  </div>
+
+  <div class="test-section">
+    <h2>🔧 Méthodes disponibles dans api.bcf</h2>
+    <div id="bcf-methods">En cours de test...</div>
+  </div>
+
+  <div class="test-section">
+    <h2>👁️ Méthodes disponibles dans api.views</h2>
+    <div id="views-methods">En cours de test...</div>
+  </div>
+
+  <div class="test-section">
+    <h2>📁 Méthodes disponibles dans api.files</h2>
+    <div id="files-methods">En cours de test...</div>
+  </div>
+
+  <div class="test-section">
+    <h2>🧪 Test des appels API</h2>
+    <div id="api-tests">En attente de la connexion...</div>
+  </div>
+
+  <script type="module">
+    const TrimbleConnectWorkspace = window.TrimbleConnectWorkspace;
+
+    function log(containerId, message, type = 'log') {
+      const container = document.getElementById(containerId);
+      const logDiv = document.createElement('div');
+      logDiv.className = `log ${type}`;
+      logDiv.textContent = message;
+      container.appendChild(logDiv);
+    }
+
+    function clearLog(containerId) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+    }
+
+    async function testWorkspaceAPI() {
+      try {
+        // Connexion
+        log('connection-status', '🔌 Connexion à TrimbleConnectWorkspace...', 'log');
+        
+        const api = await TrimbleConnectWorkspace.connect(
+          window.parent,
+          (event, args) => {
+            console.log('📡 Event:', event, args);
+          }
+        );
+
+        log('connection-status', '✅ Connexion établie avec succès!', 'success');
+
+        // Récupérer le projet
+        const project = await api.project.getCurrentProject();
+        log('connection-status', `📁 Projet: ${project.name} (ID: ${project.id})`, 'success');
+
+        // TEST 1: Vérifier api.todos
+        clearLog('todos-methods');
+        log('todos-methods', '🔍 Inspection de api.todos...', 'log');
+        
+        if (api.todos) {
+          log('todos-methods', '✅ api.todos existe!', 'success');
+          log('todos-methods', `Méthodes disponibles: ${Object.keys(api.todos).join(', ')}`, 'log');
+          
+          // Tester getAll
+          if (typeof api.todos.getAll === 'function') {
+            log('todos-methods', '✅ api.todos.getAll() existe - Test en cours...', 'success');
+            try {
+              const todos = await api.todos.getAll();
+              log('api-tests', `✅ api.todos.getAll() fonctionne! Récupéré: ${todos.length} todos`, 'success');
+              log('api-tests', `Premier todo: ${JSON.stringify(todos[0], null, 2)}`, 'log');
+            } catch (error) {
+              log('api-tests', `❌ api.todos.getAll() existe mais échoue: ${error.message}`, 'error');
+            }
+          } else {
+            log('todos-methods', '❌ api.todos.getAll() N\'EXISTE PAS', 'error');
+          }
+        } else {
+          log('todos-methods', '❌ api.todos N\'EXISTE PAS', 'error');
+        }
+
+        // TEST 2: Vérifier api.bcf
+        clearLog('bcf-methods');
+        log('bcf-methods', '🔍 Inspection de api.bcf...', 'log');
+        
+        if (api.bcf) {
+          log('bcf-methods', '✅ api.bcf existe!', 'success');
+          log('bcf-methods', `Méthodes disponibles: ${Object.keys(api.bcf).join(', ')}`, 'log');
+          
+          // Tester getTopics
+          if (typeof api.bcf.getTopics === 'function') {
+            log('bcf-methods', '✅ api.bcf.getTopics() existe - Test en cours...', 'success');
+            try {
+              const topics = await api.bcf.getTopics();
+              log('api-tests', `✅ api.bcf.getTopics() fonctionne! Récupéré: ${topics.length} topics`, 'success');
+            } catch (error) {
+              log('api-tests', `❌ api.bcf.getTopics() existe mais échoue: ${error.message}`, 'error');
+            }
+          } else {
+            log('bcf-methods', '❌ api.bcf.getTopics() N\'EXISTE PAS', 'error');
+          }
+        } else {
+          log('bcf-methods', '❌ api.bcf N\'EXISTE PAS', 'error');
+        }
+
+        // TEST 3: Vérifier api.views
+        clearLog('views-methods');
+        log('views-methods', '🔍 Inspection de api.views...', 'log');
+        
+        if (api.views) {
+          log('views-methods', '✅ api.views existe!', 'success');
+          log('views-methods', `Méthodes disponibles: ${Object.keys(api.views).join(', ')}`, 'log');
+          
+          if (typeof api.views.getAll === 'function') {
+            log('views-methods', '✅ api.views.getAll() existe - Test en cours...', 'success');
+            try {
+              const views = await api.views.getAll();
+              log('api-tests', `✅ api.views.getAll() fonctionne! Récupéré: ${views.length} vues`, 'success');
+            } catch (error) {
+              log('api-tests', `❌ api.views.getAll() existe mais échoue: ${error.message}`, 'error');
+            }
+          } else {
+            log('views-methods', '❌ api.views.getAll() N\'EXISTE PAS', 'error');
+          }
+        } else {
+          log('views-methods', '❌ api.views N\'EXISTE PAS', 'error');
+        }
+
+        // TEST 4: Vérifier api.files
+        clearLog('files-methods');
+        log('files-methods', '🔍 Inspection de api.files...', 'log');
+        
+        if (api.files) {
+          log('files-methods', '✅ api.files existe!', 'success');
+          log('files-methods', `Méthodes disponibles: ${Object.keys(api.files).join(', ')}`, 'log');
+          
+          if (typeof api.files.getFiles === 'function') {
+            log('files-methods', '✅ api.files.getFiles() existe - Test en cours...', 'success');
+            try {
+              const files = await api.files.getFiles('/');
+              log('api-tests', `✅ api.files.getFiles('/') fonctionne! Récupéré: ${files.length} items`, 'success');
+            } catch (error) {
+              log('api-tests', `❌ api.files.getFiles() existe mais échoue: ${error.message}`, 'error');
+            }
+          } else {
+            log('files-methods', '❌ api.files.getFiles() N\'EXISTE PAS', 'error');
+          }
+        } else {
+          log('files-methods', '❌ api.files N\'EXISTE PAS', 'error');
+        }
+
+        // RÉSUMÉ
+        log('api-tests', '═══════════════════════════════════════', 'warning');
+        log('api-tests', '📊 RÉSUMÉ DES TESTS', 'warning');
+        log('api-tests', '═══════════════════════════════════════', 'warning');
+
+        // Afficher toutes les clés disponibles dans api
+        log('api-tests', `🔑 Clés disponibles dans api: ${Object.keys(api).join(', ')}`, 'log');
+
+      } catch (error) {
+        log('connection-status', `❌ Erreur de connexion: ${error.message}`, 'error');
+        log('connection-status', `Stack: ${error.stack}`, 'error');
+      }
+    }
+
+    // Démarrer les tests
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('🧪 Démarrage des tests...');
+      testWorkspaceAPI();
+    });
+  </script>
+</body>
+</html>
