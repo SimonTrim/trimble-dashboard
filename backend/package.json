@@ -1,0 +1,22 @@
+{
+  "name": "trimble-dashboard-backend",
+  "version": "1.0.0",
+  "description": "Secure OAuth2 proxy backend for Trimble Connect Dashboard Extension",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["trimble", "connect", "oauth2", "proxy", "dashboard"],
+  "author": "Simon Martin",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "node-fetch": "^2.7.0"
+  }
+}
