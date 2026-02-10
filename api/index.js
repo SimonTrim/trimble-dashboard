@@ -2,9 +2,11 @@
  * Vercel Serverless Function - Trimble Dashboard Backend
  * 
  * Version autonome pour Vercel (ne dépend pas de backend/server.js)
+ * Last updated: 2026-02-10
  */
 
-console.log('🔵 [Vercel] Starting serverless function...');
+console.log('🔵 [Vercel v2.1] Starting serverless function...');
+console.log('🔵 [Vercel] Timestamp:', new Date().toISOString());
 
 const express = require('express');
 const cors = require('cors');
@@ -417,8 +419,9 @@ app.get('/', (req, res) => {
   console.log('✅ Root endpoint called');
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '2.0.0',
+    version: '2.1.0',
     environment: ENVIRONMENT,
+    deployed: new Date().toISOString(),
     endpoints: {
       auth: {
         login: '/auth/login',
