@@ -1,0 +1,30 @@
+# Fichiers et dossiers à ignorer lors du déploiement Vercel
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Documentation
+README.md
+SETUP-STAGING.md
+*.md
+
+# Git
+.git
+.gitignore
+
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

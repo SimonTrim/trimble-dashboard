@@ -9,6 +9,7 @@ import { logger } from './utils/logger';
 import { errorHandler, ErrorCode } from './utils/errorHandler';
 import { trimbleClient } from './api/trimbleClient';
 import { createWorkspaceAPIAdapter } from './api/workspaceAPIAdapter';
+import { authService } from './api/authService';
 
 // Type pour l'API Workspace
 interface WorkspaceAPIInstance {
@@ -76,12 +77,25 @@ async function initialize(): Promise<void> {
  * Initialisation en mode standalone (lien direct)
  */
 async function initializeStandalone(): Promise<void> {
-  // Initialiser le TrimbleClient avec mock
-  logger.info('Initializing TrimbleClient with mock data...');
-  logger.warn('⚠️ Using MOCK data - Real data access requires REST API implementation');
+  logger.info('Checking authentication status...');
+  
+  // Vérifier si l'utilisateur est authentifié
+  const isAuth = await authService.isAuthenticated();
+  
+  if (!isAuth) {
+    // Afficher l'écran de connexion
+    logger.info('❌ User not authenticated - showing login screen');
+    displayLoginScreen();
+    return;
+  }
+  
+  logger.info('✅ User authenticated - loading dashboard');
+  
+  // Initialiser le TrimbleClient avec les vraies données
+  logger.info('Initializing TrimbleClient with API data...');
   await trimbleClient.initialize();
   
-  // Créer et afficher le dashboard immédiatement
+  // Créer et afficher le dashboard
   logger.info('Creating dashboard...');
   dashboard = new Dashboard('app', {
     refreshInterval: 30000,
@@ -90,7 +104,7 @@ async function initializeStandalone(): Promise<void> {
     enableAutoRefresh: true,
   });
 
-  // Afficher immédiatement en mode standalone
+  // Afficher le dashboard
   await dashboard.render();
   isDashboardVisible = true;
   
@@ -327,6 +341,112 @@ async function refreshDashboard(): Promise<void> {
     logger.info('✓ Data refreshed');
   } catch (error) {
     logger.error('Failed to refresh data', { error });
+  }
+}
+
+/**
+ * Afficher l'écran de connexion OAuth
+ */
+function displayLoginScreen(): void {
+  const appContainer = document.getElementById('app');
+  if (!appContainer) return;
+
+  appContainer.innerHTML = `
+    <div style="
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #005F9E 0%, #004a7c 100%);
+      color: white;
+      font-family: 'Roboto', sans-serif;
+      text-align: center;
+      padding: 20px;
+    ">
+      <div style="
+        background: white;
+        color: #333;
+        border-radius: 12px;
+        padding: 40px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        max-width: 500px;
+        width: 100%;
+      ">
+        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" style="margin-bottom: 20px;">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#005F9E"/>
+          <path d="M2 17L12 22L22 17" stroke="#005F9E" stroke-width="2" fill="none"/>
+          <path d="M2 12L12 17L22 12" stroke="#005F9E" stroke-width="2" fill="none"/>
+        </svg>
+        
+        <h1 style="
+          font-size: 28px;
+          font-weight: 700;
+          margin-bottom: 16px;
+          color: #005F9E;
+        ">
+          Trimble Connect Dashboard
+        </h1>
+        
+        <p style="
+          font-size: 16px;
+          color: #666;
+          margin-bottom: 32px;
+          line-height: 1.6;
+        ">
+          Connectez-vous avec votre compte Trimble Identity pour accéder à vos données de projet en temps réel.
+        </p>
+        
+        <button 
+          id="login-btn"
+          style="
+            background: #005F9E;
+            color: white;
+            border: none;
+            padding: 16px 48px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,95,158,0.3);
+          "
+          onmouseover="this.style.background='#004a7c'; this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(0,95,158,0.4)'"
+          onmouseout="this.style.background='#005F9E'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,95,158,0.3)'"
+        >
+          🔐 Se connecter avec Trimble ID
+        </button>
+        
+        <div style="
+          margin-top: 24px;
+          padding-top: 24px;
+          border-top: 1px solid #e0e0e0;
+          font-size: 12px;
+          color: #999;
+        ">
+          <p>Sécurisé par OAuth 2.0</p>
+          <p style="margin-top: 8px;">Backend: ${(window as any).BACKEND_URL || 'Production'}</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Ajouter l'event listener pour le bouton de connexion
+  const loginBtn = document.getElementById('login-btn');
+  if (loginBtn) {
+    loginBtn.addEventListener('click', async () => {
+      logger.info('🔐 User clicked login button');
+      loginBtn.textContent = '⏳ Redirection...';
+      loginBtn.setAttribute('disabled', 'true');
+      
+      try {
+        await authService.login();
+      } catch (error) {
+        logger.error('❌ Login error:', error as any);
+        loginBtn.textContent = '❌ Erreur - Réessayer';
+        loginBtn.removeAttribute('disabled');
+      }
+    });
   }
 }
 

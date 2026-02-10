@@ -5,9 +5,11 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "webpack --mode development --watch",
-    "build": "webpack --mode production",
+    "build": "webpack --mode production && npm run copy-dist",
+    "copy-dist": "powershell -Command \"New-Item -ItemType Directory -Path 'public/dist' -Force | Out-Null; Copy-Item -Path 'dist/index.js' -Destination 'public/dist/index.js' -Force\"",
     "clean": "rimraf dist",
-    "test": "echo \"Tests à venir\" && exit 0"
+    "test": "echo \"Tests à venir\" && exit 0",
+    "serve": "http-server public -p 8080 -c-1 --cors"
   },
   "keywords": [
     "trimble",
@@ -19,11 +21,16 @@
   "license": "MIT",
   "dependencies": {
     "chart.js": "^4.4.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "node-fetch": "^2.7.0",
     "trimble-connect-workspace-api": "^0.3.33"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "css-loader": "^6.8.1",
+    "http-server": "^14.1.1",
     "rimraf": "^5.0.5",
     "style-loader": "^3.3.3",
     "ts-loader": "^9.5.0",

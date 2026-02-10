@@ -45,8 +45,27 @@ const TRIMBLE_API_BASE = IS_STAGING ? {
 const tokenStore = new Map();
 
 // Middleware
+// Configuration CORS : accepter localhost (test) et GitHub Pages (production)
+const allowedOrigins = [
+  'http://localhost:8080',
+  'http://localhost:3001',
+  'http://localhost:5500', // Live Server VSCode
+  'https://simontrim.github.io',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://simontrim.github.io',
+  origin: (origin, callback) => {
+    // Permettre les requêtes sans origin (comme Postman) en dev
+    if (!origin && process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -76,7 +95,7 @@ app.get('/auth/login', (req, res) => {
     response_type: 'code',
     client_id: process.env.TRIMBLE_CLIENT_ID,
     redirect_uri: process.env.TRIMBLE_REDIRECT_URI,
-    scope: 'TCWEBNextgen', // Scope principal Trimble Connect
+    scope: 'openid SMA-tc-dashboard', // openid + nom de l'application pour accès API
     state: `${state}:${sessionId}`
   });
 
@@ -85,10 +104,10 @@ app.get('/auth/login', (req, res) => {
 });
 
 /**
- * GET /auth/callback
+ * GET /callback
  * Reçoit le code d'autorisation de Trimble Identity
  */
-app.get('/auth/callback', async (req, res) => {
+app.get('/callback', async (req, res) => {
   const { code, state } = req.query;
 
   if (!code || !state) {
@@ -120,7 +139,19 @@ app.get('/auth/callback', async (req, res) => {
 
     // Rediriger vers l'extension avec le sessionId
     const frontendUrl = process.env.FRONTEND_URL || 'https://simontrim.github.io';
-    res.redirect(`${frontendUrl}/trimble-dashboard/?session=${sessionId}&auth=success`);
+    
+    // Déterminer l'URL de redirection selon l'environnement
+    let redirectUrl;
+    if (frontendUrl.includes('localhost')) {
+      // Mode local : rediriger vers index-local.html
+      redirectUrl = `${frontendUrl}/index-local.html?session=${sessionId}&auth=success`;
+    } else {
+      // Mode production : rediriger vers GitHub Pages
+      redirectUrl = `${frontendUrl}/trimble-dashboard/?session=${sessionId}&auth=success`;
+    }
+    
+    console.log(`✅ OAuth success, redirecting to: ${redirectUrl}`);
+    res.redirect(redirectUrl);
 
   } catch (error) {
     console.error('❌ OAuth callback error:', error.message);
@@ -357,19 +388,34 @@ app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
  * Vérifie le statut d'authentification
  */
 app.get('/api/auth/status', (req, res) => {
-  const sessionId = req.headers['x-session-id'];
+  // Accepter le sessionId soit en header, soit en query parameter
+  const sessionId = req.headers['x-session-id'] || req.query.session;
   
   if (!sessionId) {
+    console.log('❌ /api/auth/status - No session ID provided');
     return res.json({ authenticated: false });
   }
 
   const tokenData = tokenStore.get(`tokens_${sessionId}`);
   const authenticated = !!tokenData && Date.now() < tokenData.expiresAt;
 
-  res.json({ 
-    authenticated,
-    region: tokenData?.region || null
-  });
+  if (authenticated && tokenData) {
+    console.log(`✅ /api/auth/status - Session ${sessionId.substring(0, 8)}... authenticated`);
+    res.json({ 
+      authenticated: true,
+      tokens: {
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken,
+        expiresAt: tokenData.expiresAt,
+        region: tokenData.region
+      }
+    });
+  } else {
+    console.log(`❌ /api/auth/status - Session ${sessionId.substring(0, 8)}... not authenticated or expired`);
+    res.json({ 
+      authenticated: false 
+    });
+  }
 });
 
 /**
