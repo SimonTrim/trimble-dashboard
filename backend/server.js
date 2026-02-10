@@ -221,10 +221,32 @@ async function refreshAccessToken(refreshToken) {
 // ========================================
 
 async function requireAuth(req, res, next) {
+  // Supporter deux types d'authentification:
+  // 1. Bearer token (mode intégré Trimble Connect) via header Authorization
+  // 2. Session ID (mode standalone avec OAuth complet) via header x-session-id
+  
+  const authHeader = req.headers['authorization'];
   const sessionId = req.headers['x-session-id'];
 
+  // ====== CAS 1: Bearer Token (Mode Intégré) ======
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const accessToken = authHeader.substring(7); // Retirer "Bearer "
+    
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Invalid authorization header' });
+    }
+
+    console.log('🔑 Using Bearer token authentication (integrated mode)');
+    
+    // Attacher le token à la requête (pas de refresh possible en mode intégré)
+    req.accessToken = accessToken;
+    req.region = 'europe'; // Région par défaut, peut être modifiée selon besoin
+    return next();
+  }
+
+  // ====== CAS 2: Session ID (Mode Standalone) ======
   if (!sessionId) {
-    return res.status(401).json({ error: 'Missing session ID' });
+    return res.status(401).json({ error: 'Missing session ID or authorization header' });
   }
 
   const tokenData = tokenStore.get(`tokens_${sessionId}`);
@@ -255,7 +277,7 @@ async function requireAuth(req, res, next) {
     }
   }
 
-  // Ajouter le token et la région à la requête
+  // Attacher le token et la région à la requête
   req.accessToken = tokenData.accessToken;
   req.region = tokenData.region;
   next();
