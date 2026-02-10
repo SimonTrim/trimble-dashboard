@@ -479,11 +479,16 @@ function generateRandomState() {
 // DÉMARRAGE DU SERVEUR
 // ========================================
 
-app.listen(PORT, () => {
-  const envLabel = IS_STAGING ? '🧪 STAGING' : '🚀 PRODUCTION';
-  const apiUrl = IS_STAGING ? 'app.stage.connect.trimble.com' : 'app.connect.trimble.com';
-  
-  console.log(`
+// Détecter si on est sur Vercel (serverless) ou en local
+const isServerless = process.env.VERCEL || process.env.NODE_ENV === 'production';
+
+if (!isServerless) {
+  // Mode développement local : écouter sur un port
+  app.listen(PORT, () => {
+    const envLabel = IS_STAGING ? '🧪 STAGING' : '🚀 PRODUCTION';
+    const apiUrl = IS_STAGING ? 'app.stage.connect.trimble.com' : 'app.connect.trimble.com';
+    
+    console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║  ${envLabel} - Trimble Dashboard Backend                    ║
 ║                                                            ║
@@ -507,8 +512,12 @@ app.listen(PORT, () => {
 ║                                                            ║
 ║  ✅ Server is ready!                                       ║
 ╚════════════════════════════════════════════════════════════╝
-  `);
-});
+    `);
+  });
+} else {
+  // Mode serverless (Vercel) : juste logger
+  console.log('🚀 Serverless function ready on Vercel');
+}
 
 // Gestion des erreurs globales
 process.on('unhandledRejection', (error) => {
@@ -517,5 +526,10 @@ process.on('unhandledRejection', (error) => {
 
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);
-  process.exit(1);
+  if (!isServerless) {
+    process.exit(1);
+  }
 });
+
+// Export pour Vercel (serverless)
+module.exports = app;
