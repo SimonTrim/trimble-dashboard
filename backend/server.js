@@ -480,7 +480,7 @@ function generateRandomState() {
 // ========================================
 
 // Détecter si on est sur Vercel (serverless) ou en local
-const isServerless = process.env.VERCEL || process.env.NODE_ENV === 'production';
+const isServerless = !!process.env.VERCEL;
 
 if (!isServerless) {
   // Mode développement local : écouter sur un port
