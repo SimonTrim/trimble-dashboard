@@ -326,6 +326,8 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
     // Récupérer les items du dossier
     const apiUrl = `${TRIMBLE_APIS_BASE}/organizer/v2/projects/${projectId}/folders/${targetFolderId}/items`;
     
+    console.log(`📡 Calling Trimble API: ${apiUrl}`);
+    
     const response = await fetch(apiUrl, {
       headers: {
         'Authorization': `Bearer ${req.accessToken}`,
@@ -355,6 +357,8 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
     const apiUrl = `${TRIMBLE_APIS_BASE}/todo/v1/projects/${projectId}/todos`;
+    
+    console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
     const response = await fetch(apiUrl, {
       headers: {
@@ -386,6 +390,8 @@ app.get('/api/projects/:projectId/topics', requireAuth, async (req, res) => {
     const { projectId } = req.params;
     const apiUrl = `${TRIMBLE_APIS_BASE}/bcf/2.1/projects/${projectId}/topics`;
     
+    console.log(`📡 Calling Trimble API: ${apiUrl}`);
+    
     const response = await fetch(apiUrl, {
       headers: {
         'Authorization': `Bearer ${req.accessToken}`,
@@ -415,6 +421,8 @@ app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
     const apiUrl = `${TRIMBLE_APIS_BASE}/view/v1/projects/${projectId}/views`;
+    
+    console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
     const response = await fetch(apiUrl, {
       headers: {
