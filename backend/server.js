@@ -56,15 +56,17 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permettre les requêtes sans origin (comme Postman) en dev
-    if (!origin && process.env.NODE_ENV === 'development') {
+    // Permettre les requêtes sans origin (accès direct, Postman, curl, etc.)
+    if (!origin) {
       return callback(null, true);
     }
+    // Vérifier si l'origin est dans la liste autorisée
     if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`Origin ${origin} not allowed by CORS`));
+      return callback(null, true);
     }
+    // Rejeter les origins non autorisés
+    console.warn(`⚠️ Origin rejected: ${origin}`);
+    callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   credentials: true
 }));
