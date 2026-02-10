@@ -7,10 +7,18 @@
  * - Gestion des tokens (access + refresh)
  */
 
-require('dotenv').config();
+// Sur Vercel, dotenv n'est pas nécessaire (variables d'env configurées dans dashboard)
+try {
+  require('dotenv').config();
+} catch (e) {
+  console.log('ℹ️ dotenv non trouvé (normal sur Vercel)');
+}
+
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+
+console.log('🔵 [Backend] server.js is loading...');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +26,11 @@ const PORT = process.env.PORT || 3000;
 // Configuration (Staging ou Production selon env)
 const ENVIRONMENT = process.env.ENVIRONMENT || 'staging';
 const IS_STAGING = ENVIRONMENT === 'staging';
+
+console.log('✅ [Backend] Express app créée');
+console.log('ℹ️ [Backend] ENVIRONMENT:', ENVIRONMENT);
+console.log('ℹ️ [Backend] IS_STAGING:', IS_STAGING);
+console.log('ℹ️ [Backend] TRIMBLE_CLIENT_ID:', process.env.TRIMBLE_CLIENT_ID ? '✓ défini' : '✗ MANQUANT');
 
 const TRIMBLE_AUTH_URL = IS_STAGING 
   ? 'https://stage.id.trimble.com/oauth/authorize'
@@ -569,4 +582,6 @@ process.on('uncaughtException', (error) => {
 });
 
 // Export pour Vercel (serverless)
+console.log('✅ [Backend] Exporting Express app for Vercel...');
 module.exports = app;
+console.log('✅ [Backend] Export complete!');
