@@ -44,16 +44,25 @@ export class WorkspaceAPIAdapter {
   private baseUrl: string;
   private accessToken: string | null = null;
 
-  constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string) {
+  constructor(
+    workspaceAPI: TrimbleWorkspaceAPI, 
+    projectId: string, 
+    projectLocation?: string,
+    accessToken?: string
+  ) {
     this.workspaceAPI = workspaceAPI;
     this.projectId = projectId;
     this.projectLocation = projectLocation || 'us';
+    this.accessToken = accessToken || null;
     
     // Déterminer l'URL de base selon la région du projet
     this.baseUrl = this.getRegionalApiUrl(this.projectLocation);
     
     logger.info(`✅ WorkspaceAPIAdapter initialized for project: ${projectId}`);
     logger.info(`🌍 Region: ${this.projectLocation} → API URL: ${this.baseUrl}`);
+    if (this.accessToken) {
+      logger.info(`🔑 Access token provided`);
+    }
   }
 
   /**
@@ -346,10 +355,16 @@ export class WorkspaceAPIAdapter {
 /**
  * Créer un adaptateur à partir du TrimbleConnectWorkspace API
  */
-export function createWorkspaceAPIAdapter(
-  workspaceAPI: TrimbleWorkspaceAPI,
-  projectId: string,
-  projectLocation?: string
-): any {
-  return new WorkspaceAPIAdapter(workspaceAPI, projectId, projectLocation);
+export function createWorkspaceAPIAdapter(params: {
+  workspaceAPI: TrimbleWorkspaceAPI;
+  projectInfo: any;
+  accessToken?: string;
+  baseUrl?: string;
+}): any {
+  return new WorkspaceAPIAdapter(
+    params.workspaceAPI, 
+    params.projectInfo.id, 
+    params.projectInfo.location,
+    params.accessToken
+  );
 }

@@ -137,81 +137,29 @@ async function initializeIntegrated(): Promise<void> {
       location: projectInfo.location 
     });
 
-    // 🔍 DEBUG: Afficher TOUTES les méthodes disponibles dans workspaceAPI
-    logger.info('═══════════════════════════════════════════');
-    logger.info('🔬 TEST WORKSPACE API - MÉTHODES DISPONIBLES');
-    logger.info('═══════════════════════════════════════════');
+    // Étape 3: Demander l'access token à Trimble Connect
+    logger.info('Requesting access token from Trimble Connect...');
     
-    logger.info('📋 Clés principales de workspaceAPI:', Object.keys(workspaceAPI));
-    
-    // Vérifier api.project
-    if (workspaceAPI.project) {
-      logger.info('✅ workspaceAPI.project existe');
-      logger.info('   Méthodes:', Object.keys(workspaceAPI.project));
+    try {
+      const tokenResponse = await workspaceAPI.extension.requestPermission('accesstoken');
+      
+      if (tokenResponse === 'pending') {
+        logger.info('⏳ Waiting for user consent...');
+        // Le token sera reçu via l'événement extension.accessToken
+      } else if (tokenResponse === 'denied') {
+        logger.error('❌ User denied access token permission');
+        displayAuthError('Permission refusée. Veuillez autoriser l\'accès dans les paramètres de l\'extension.');
+        return;
+      } else {
+        // Token reçu directement (l'utilisateur a déjà donné son consentement)
+        logger.info('✅ Access token received');
+        await initializeWithToken(tokenResponse as string, projectInfo);
+      }
+    } catch (error) {
+      logger.error('❌ Failed to request access token:', error as any);
+      displayAuthError('Impossible de récupérer le token d\'authentification.');
     }
-    
-    // Vérifier api.todos
-    if ((workspaceAPI as any).todos) {
-      logger.info('✅ workspaceAPI.todos EXISTE!');
-      logger.info('   Méthodes:', Object.keys((workspaceAPI as any).todos));
-    } else {
-      logger.error('❌ workspaceAPI.todos N\'EXISTE PAS');
-    }
-    
-    // Vérifier api.bcf
-    if ((workspaceAPI as any).bcf) {
-      logger.info('✅ workspaceAPI.bcf EXISTE!');
-      logger.info('   Méthodes:', Object.keys((workspaceAPI as any).bcf));
-    } else {
-      logger.error('❌ workspaceAPI.bcf N\'EXISTE PAS');
-    }
-    
-    // Vérifier api.views
-    if ((workspaceAPI as any).views) {
-      logger.info('✅ workspaceAPI.views EXISTE!');
-      logger.info('   Méthodes:', Object.keys((workspaceAPI as any).views));
-    } else {
-      logger.error('❌ workspaceAPI.views N\'EXISTE PAS');
-    }
-    
-    // Vérifier api.files
-    if ((workspaceAPI as any).files) {
-      logger.info('✅ workspaceAPI.files EXISTE!');
-      logger.info('   Méthodes:', Object.keys((workspaceAPI as any).files));
-    } else {
-      logger.error('❌ workspaceAPI.files N\'EXISTE PAS');
-    }
-    
-    logger.info('═══════════════════════════════════════════');
   }
-
-  // Étape 3: Créer l'adaptateur avec la région
-  logger.info('🔄 Creating WorkspaceAPI adapter with regional REST API...');
-  const apiAdapter = createWorkspaceAPIAdapter(
-    workspaceAPI, 
-    projectId!,
-    projectInfo.location // europe, us, asia, australia
-  );
-  
-  // Initialiser le TrimbleClient avec l'adaptateur
-  logger.info('🎯 Initializing TrimbleClient with REAL Workspace API...');
-  trimbleClient.initializeWithApi(apiAdapter, projectId);
-  logger.info('✅ Using REAL project data from Trimble Connect!');
-  
-  // Étape 4: Créer le menu dans le panneau latéral
-  logger.info('Creating sidebar menu...');
-  createSidebarMenu();
-
-  // Étape 5: Créer l'instance du dashboard
-  logger.info('Initializing dashboard...');
-  dashboard = new Dashboard('app', {
-    refreshInterval: 30000,
-    recentFilesThreshold: 48,
-    maxRecentFilesDisplay: 10,
-    enableAutoRefresh: true,
-  });
-
-  logger.info(`✅ Extension ready for project: ${projectInfo.name} (${projectInfo.location})`);
 }
 
 /**
@@ -261,7 +209,16 @@ function handleWorkspaceEvents(event: string, args: any): void {
       break;
       
     case 'extension.accessToken':
-      logger.info('Access token received', { status: args.data });
+      // Token reçu de Trimble Connect (après consentement utilisateur ou refresh)
+      logger.info('Access token received from Trimble Connect');
+      if (args.data && typeof args.data === 'string' && args.data !== 'pending' && args.data !== 'denied') {
+        // Initialiser le dashboard avec le token
+        getCurrentProjectInfo().then(projectInfo => {
+          if (projectInfo) {
+            initializeWithToken(args.data, projectInfo);
+          }
+        });
+      }
       break;
       
     case 'extension.userSettingsChanged':
@@ -448,6 +405,108 @@ function displayLoginScreen(): void {
       }
     });
   }
+}
+
+/**
+ * Afficher une erreur d'authentification
+ */
+function displayAuthError(message: string): void {
+  const container = document.getElementById('app');
+  if (!container) {
+    console.error('App container not found');
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      padding: 20px;
+      text-align: center;
+      font-family: 'Roboto', sans-serif;
+    ">
+      <div style="
+        background: white;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        max-width: 500px;
+      ">
+        <div style="font-size: 60px; margin-bottom: 20px;">🔒</div>
+        <h2 style="color: #d32f2f; margin-bottom: 16px;">Erreur d'authentification</h2>
+        <p style="color: #666; margin-bottom: 24px;">${message}</p>
+        <button 
+          onclick="location.reload()" 
+          style="
+            background: #005F9E;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+          "
+        >
+          🔄 Réessayer
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Obtenir les infos du projet actuel
+ */
+async function getCurrentProjectInfo(): Promise<any> {
+  if (!workspaceAPI) {
+    logger.error('WorkspaceAPI not initialized');
+    return null;
+  }
+  
+  try {
+    const projectInfo = await workspaceAPI.project.getCurrentProject();
+    return projectInfo;
+  } catch (error) {
+    logger.error('Failed to get current project', error as any);
+    return null;
+  }
+}
+
+/**
+ * Initialiser avec le token reçu de Trimble Connect
+ */
+async function initializeWithToken(accessToken: string, projectInfo: any): Promise<void> {
+  logger.info('Initializing with Trimble Connect token...');
+  
+  // Créer un adaptateur avec le token
+  const apiAdapter = createWorkspaceAPIAdapter({
+    workspaceAPI: workspaceAPI as any,
+    projectInfo: projectInfo,
+    accessToken: accessToken,
+    baseUrl: (window as any).BACKEND_URL || 'https://trimble-dashboard.vercel.app'
+  });
+  
+  // Initialiser le client Trimble avec l'adaptateur
+  trimbleClient.initializeWithApi(apiAdapter);
+  
+  // Créer le menu dans le panneau latéral
+  createSidebarMenu();
+  
+  // Créer et afficher le dashboard
+  logger.info('Creating dashboard...');
+  dashboard = new Dashboard('app', {
+    refreshInterval: 30000,
+    recentFilesThreshold: 48,
+    maxRecentFilesDisplay: 10,
+    enableAutoRefresh: true,
+  });
+
+  await dashboard.render();
+  isDashboardVisible = true;
+  
+  logger.info('✅ Extension ready with Trimble Connect authentication!');
 }
 
 /**

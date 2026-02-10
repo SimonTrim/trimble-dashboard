@@ -38,7 +38,7 @@ export declare class WorkspaceAPIAdapter {
     private projectLocation;
     private baseUrl;
     private accessToken;
-    constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string);
+    constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string, accessToken?: string);
     /**
      * Obtenir l'URL de l'API selon la région
      */
@@ -95,6 +95,11 @@ export declare class WorkspaceAPIAdapter {
 /**
  * Créer un adaptateur à partir du TrimbleConnectWorkspace API
  */
-export declare function createWorkspaceAPIAdapter(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string): any;
+export declare function createWorkspaceAPIAdapter(params: {
+    workspaceAPI: TrimbleWorkspaceAPI;
+    projectInfo: any;
+    accessToken?: string;
+    baseUrl?: string;
+}): any;
 export {};
 //# sourceMappingURL=workspaceAPIAdapter.d.ts.map
