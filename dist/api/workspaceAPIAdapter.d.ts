@@ -36,19 +36,15 @@ export declare class WorkspaceAPIAdapter {
     private workspaceAPI;
     private projectId;
     private projectLocation;
-    private baseUrl;
+    private backendUrl;
     private accessToken;
-    constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string, accessToken?: string);
-    /**
-     * Obtenir l'URL de l'API selon la région
-     */
-    private getRegionalApiUrl;
+    constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string, accessToken?: string, backendUrl?: string);
     /**
      * Obtenir le token d'accès (avec gestion du consentement utilisateur)
      */
     private getAccessToken;
     /**
-     * Faire un appel REST authentifié vers l'API Trimble Connect
+     * Faire un appel REST authentifié via le backend proxy
      */
     private fetchAPI;
     /**

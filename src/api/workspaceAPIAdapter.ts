@@ -41,42 +41,30 @@ export class WorkspaceAPIAdapter {
   private workspaceAPI: TrimbleWorkspaceAPI;
   private projectId: string;
   private projectLocation: string;
-  private baseUrl: string;
+  private backendUrl: string;
   private accessToken: string | null = null;
 
   constructor(
     workspaceAPI: TrimbleWorkspaceAPI, 
     projectId: string, 
     projectLocation?: string,
-    accessToken?: string
+    accessToken?: string,
+    backendUrl?: string
   ) {
     this.workspaceAPI = workspaceAPI;
     this.projectId = projectId;
     this.projectLocation = projectLocation || 'us';
     this.accessToken = accessToken || null;
     
-    // Déterminer l'URL de base selon la région du projet
-    this.baseUrl = this.getRegionalApiUrl(this.projectLocation);
+    // Utiliser le backend proxy au lieu de l'API Trimble directe
+    this.backendUrl = backendUrl || 'https://trimble-dashboard.vercel.app';
     
     logger.info(`✅ WorkspaceAPIAdapter initialized for project: ${projectId}`);
-    logger.info(`🌍 Region: ${this.projectLocation} → API URL: ${this.baseUrl}`);
+    logger.info(`🌍 Region: ${this.projectLocation}`);
+    logger.info(`🔗 Backend URL: ${this.backendUrl}`);
     if (this.accessToken) {
       logger.info(`🔑 Access token provided`);
     }
-  }
-
-  /**
-   * Obtenir l'URL de l'API selon la région
-   */
-  private getRegionalApiUrl(location: string): string {
-    const regionUrls: Record<string, string> = {
-      'europe': 'https://app21.connect.trimble.com/tc/api/2.0',
-      'us': 'https://app.connect.trimble.com/tc/api/2.0',
-      'asia': 'https://app-asia.connect.trimble.com/tc/api/2.0',
-      'australia': 'https://app-au.connect.trimble.com/tc/api/2.0',
-    };
-    
-    return regionUrls[location.toLowerCase()] || regionUrls['us'];
   }
 
   /**
@@ -111,13 +99,18 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * Faire un appel REST authentifié vers l'API Trimble Connect
+   * Faire un appel REST authentifié via le backend proxy
    */
   private async fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const token = await this.getAccessToken();
-    const url = `${this.baseUrl}${endpoint}`;
     
-    logger.info(`🌐 API Request: ${options?.method || 'GET'} ${url}`);
+    // Construire l'URL du backend proxy
+    // Endpoint format: /projects/{projectId}/files
+    // Backend format: /api/projects/{projectId}/files
+    const backendEndpoint = endpoint.startsWith('/api/') ? endpoint : `/api${endpoint}`;
+    const url = `${this.backendUrl}${backendEndpoint}`;
+    
+    logger.info(`🌐 API Request via backend: ${options?.method || 'GET'} ${url}`);
     
     const response = await fetch(url, {
       ...options,
@@ -130,8 +123,8 @@ export class WorkspaceAPIAdapter {
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error(`API Error ${response.status}: ${errorText}`);
-      throw new Error(`API Error ${response.status}: ${response.statusText}`);
+      logger.error(`Backend API Error ${response.status}: ${errorText}`);
+      throw new Error(`Backend API Error ${response.status}: ${response.statusText}`);
     }
 
     return response.json();
@@ -365,6 +358,7 @@ export function createWorkspaceAPIAdapter(params: {
     params.workspaceAPI, 
     params.projectInfo.id, 
     params.projectInfo.location,
-    params.accessToken
+    params.accessToken,
+    params.baseUrl
   );
 }
