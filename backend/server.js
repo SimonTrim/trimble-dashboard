@@ -27,19 +27,24 @@ const TRIMBLE_TOKEN_URL = IS_STAGING
   ? 'https://stage.id.trimble.com/oauth/token'
   : 'https://id.trimble.com/oauth/token';
 
-const TRIMBLE_API_BASE = IS_STAGING ? {
-  // STAGING URLS
+// Base URLs pour les différentes APIs Trimble Connect
+const TRIMBLE_CORE_API = IS_STAGING ? {
   us: 'https://app.stage.connect.trimble.com/tc/api/2.0',
   europe: 'https://app21.stage.connect.trimble.com/tc/api/2.0',
   asia: 'https://app-asia.stage.connect.trimble.com/tc/api/2.0',
   australia: 'https://app-au.stage.connect.trimble.com/tc/api/2.0',
 } : {
-  // PRODUCTION URLS
   us: 'https://app.connect.trimble.com/tc/api/2.0',
   europe: 'https://app21.connect.trimble.com/tc/api/2.0',
   asia: 'https://app-asia.connect.trimble.com/tc/api/2.0',
   australia: 'https://app-au.connect.trimble.com/tc/api/2.0',
 };
+
+// Base URL pour les APIs spécialisées (Documents, ToDos, Topics, Views)
+// Ces APIs ne dépendent pas de la région
+const TRIMBLE_APIS_BASE = IS_STAGING 
+  ? 'https://app.stage.connect.trimble.com'
+  : 'https://app.connect.trimble.com';
 
 // Stockage temporaire des tokens (EN PRODUCTION: utiliser Redis/Database)
 const tokenStore = new Map();
@@ -289,12 +294,37 @@ async function requireAuth(req, res, next) {
 
 /**
  * GET /api/projects/:projectId/files
- * Récupère les fichiers d'un projet
+ * Récupère les fichiers d'un projet via l'API Organizer
+ * Note: Nécessite le rootFolderId du projet
  */
 app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_API_BASE[req.region]}/projects/${projectId}/files`;
+    const { folderId } = req.query; // Optional folder ID
+    
+    // Si folderId n'est pas fourni, récupérer le rootFolderId du projet
+    let targetFolderId = folderId;
+    
+    if (!targetFolderId) {
+      const projectResponse = await fetch(`${TRIMBLE_APIS_BASE}/organizer/v2/projects/${projectId}`, {
+        headers: {
+          'Authorization': `Bearer ${req.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!projectResponse.ok) {
+        const errorText = await projectResponse.text();
+        console.error(`❌ Project API Error: ${projectResponse.status} - ${errorText}`);
+        return res.status(projectResponse.status).json({ error: errorText });
+      }
+      
+      const projectData = await projectResponse.json();
+      targetFolderId = projectData.rootFolderId;
+    }
+    
+    // Récupérer les items du dossier
+    const apiUrl = `${TRIMBLE_APIS_BASE}/organizer/v2/projects/${projectId}/folders/${targetFolderId}/items`;
     
     const response = await fetch(apiUrl, {
       headers: {
@@ -319,12 +349,12 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
 
 /**
  * GET /api/projects/:projectId/todos
- * Récupère les todos d'un projet
+ * Récupère les todos d'un projet via l'API ToDo v1
  */
 app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_API_BASE[req.region]}/projects/${projectId}/todos`;
+    const apiUrl = `${TRIMBLE_APIS_BASE}/todo/v1/projects/${projectId}/todos`;
     
     const response = await fetch(apiUrl, {
       headers: {
@@ -349,12 +379,12 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
 
 /**
  * GET /api/projects/:projectId/topics
- * Récupère les BCF topics d'un projet
+ * Récupère les BCF topics d'un projet via l'API BCF v2.1
  */
 app.get('/api/projects/:projectId/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_API_BASE[req.region]}/projects/${projectId}/topics`;
+    const apiUrl = `${TRIMBLE_APIS_BASE}/bcf/2.1/projects/${projectId}/topics`;
     
     const response = await fetch(apiUrl, {
       headers: {
@@ -379,12 +409,12 @@ app.get('/api/projects/:projectId/topics', requireAuth, async (req, res) => {
 
 /**
  * GET /api/projects/:projectId/views
- * Récupère les vues d'un projet
+ * Récupère les vues d'un projet via l'API Views v1
  */
 app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_API_BASE[req.region]}/projects/${projectId}/views`;
+    const apiUrl = `${TRIMBLE_APIS_BASE}/view/v1/projects/${projectId}/views`;
     
     const response = await fetch(apiUrl, {
       headers: {
