@@ -2,7 +2,8 @@
  * Vercel Serverless Function - Trimble Dashboard Backend
  * 
  * Version autonome pour Vercel (ne dépend pas de backend/server.js)
- * Last updated: 2026-02-10
+ * Last updated: 2026-02-10 17:20 UTC
+ * Force rebuild to pick up latest code
  */
 
 console.log('🔵 [Vercel v2.1] Starting serverless function...');
