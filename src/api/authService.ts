@@ -22,8 +22,8 @@ export class AuthService {
   private tokens: AuthTokens | null = null;
 
   constructor() {
-    // Utiliser window.BACKEND_URL si défini (mode local), sinon URL production
-    this.backendUrl = (window as any).BACKEND_URL || 'https://your-backend-url.vercel.app';
+    // Utiliser window.BACKEND_URL si défini (mode local), sinon URL production Vercel
+    this.backendUrl = (window as any).BACKEND_URL || 'https://trimble-dashboard.vercel.app';
     
     // Vérifier si on revient du callback OAuth
     this.checkAuthCallback();
