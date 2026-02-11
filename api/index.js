@@ -35,17 +35,17 @@ const TRIMBLE_TOKEN_URL = IS_STAGING
   ? 'https://stage.id.trimble.com/oauth/token'
   : 'https://id.trimble.com/oauth/token';
 
-// Base URLs pour les différentes APIs Trimble Connect (v2.1)
+// Base URLs pour les différentes APIs Trimble Connect (v2.0)
 const TRIMBLE_CORE_API = IS_STAGING ? {
-  us: 'https://app.stage.connect.trimble.com/tc/api',
-  europe: 'https://app21.stage.connect.trimble.com/tc/api',
-  asia: 'https://app31.stage.connect.trimble.com/tc/api',
-  australia: 'https://app32.stage.connect.trimble.com/tc/api',
+  us: 'https://app.stage.connect.trimble.com/tc/api/2.0',
+  europe: 'https://app21.stage.connect.trimble.com/tc/api/2.0',
+  asia: 'https://app31.stage.connect.trimble.com/tc/api/2.0',
+  australia: 'https://app32.stage.connect.trimble.com/tc/api/2.0',
 } : {
-  us: 'https://app.connect.trimble.com/tc/api',
-  europe: 'https://app21.connect.trimble.com/tc/api',
-  asia: 'https://app31.connect.trimble.com/tc/api',
-  australia: 'https://app32.connect.trimble.com/tc/api',
+  us: 'https://app.connect.trimble.com/tc/api/2.0',
+  europe: 'https://app21.connect.trimble.com/tc/api/2.0',
+  asia: 'https://app31.connect.trimble.com/tc/api/2.0',
+  australia: 'https://app32.connect.trimble.com/tc/api/2.0',
 };
 
 // Stockage temporaire des tokens
@@ -311,10 +311,10 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/projects/:projectId/topics', requireAuth, async (req, res) => {
+app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/topics`;
+    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/bcf/topics`;
     
     console.log(`📡 Calling Trimble API: ${apiUrl}`);
     

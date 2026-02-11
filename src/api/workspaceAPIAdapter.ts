@@ -266,15 +266,15 @@ export class WorkspaceAPIAdapter {
 
   /**
    * API des BCF Topics - Utilise REST API Topics (BCF 2.1/3.0)
-   * Endpoint: GET /projects/{projectId}/topics
+   * Endpoint: GET /projects/{projectId}/bcf/topics
    */
   get bcf() {
     return {
       getTopics: async (): Promise<BCFTopic[]> => {
         try {
-          logger.info('🔧 Fetching BCF topics via REST API /projects/{projectId}/topics...');
+          logger.info('🔧 Fetching BCF topics via REST API /projects/{projectId}/bcf/topics...');
           
-          const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/topics`);
+          const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/bcf/topics`);
           
           // Transformer en notre format BCFTopic
           const topics: BCFTopic[] = response.map((topic: any) => ({

@@ -74,7 +74,7 @@ export declare class WorkspaceAPIAdapter {
     };
     /**
      * API des BCF Topics - Utilise REST API Topics (BCF 2.1/3.0)
-     * Endpoint: GET /projects/{projectId}/topics
+     * Endpoint: GET /projects/{projectId}/bcf/topics
      */
     get bcf(): {
         getTopics: () => Promise<BCFTopic[]>;
