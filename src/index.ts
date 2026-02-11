@@ -485,7 +485,7 @@ async function initializeWithToken(accessToken: string, projectInfo: any): Promi
     workspaceAPI: workspaceAPI as any,
     projectInfo: projectInfo,
     accessToken: accessToken,
-    baseUrl: (window as any).BACKEND_URL || 'https://trimble-dashboard-v2.vercel.app'
+    baseUrl: (window as any).BACKEND_URL || 'https://trimble-dashboard.vercel.app'
   });
   
   // Initialiser le client Trimble avec l'adaptateur
