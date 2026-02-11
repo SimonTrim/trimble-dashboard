@@ -404,54 +404,35 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
 /**
  * GET /api/projects/:projectId/bcf/topics
  * Récupère les BCF topics d'un projet via l'API BCF v2.1 (buildingSMART standard)
- * Note: BCF Topics utilise la spécification buildingSMART BCF API v2.1/v3.0
+ * Documentation: https://app.swaggerhub.com/apis/Trimble-Connect/topic/v2
+ * Endpoint officiel: /bcf/2.1/projects/{projectId}/topics
  */
 app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
     const apiBase = TRIMBLE_API_BASE[req.region];
     
-    // BCF API standard: /bcf/2.1/projects/{projectId}/topics
-    // Essayer différentes variantes connues
-    const possibleEndpoints = [
-      `${apiBase}/bcf/2.1/projects/${projectId}/topics`,
-      `${apiBase}/2.0/projects/${projectId}/bcf/2.1/topics`,
-      `${apiBase}/2.0/topics?projectId=${projectId}`,
-    ];
+    // Endpoint officiel BCF API v2.1 (confirmé par Swagger doc)
+    const apiUrl = `${apiBase}/bcf/2.1/projects/${projectId}/topics`;
     
-    let lastError = null;
+    console.log(`📡 Calling BCF Topics API: ${apiUrl}`);
     
-    for (const apiUrl of possibleEndpoints) {
-      try {
-        console.log(`📡 Trying BCF endpoint: ${apiUrl}`);
-        
-        const response = await fetch(apiUrl, {
-          headers: {
-            'Authorization': `Bearer ${req.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`✅ Retrieved ${data.length || 0} BCF topics from: ${apiUrl}`);
-          return res.json(data);
-        }
-        
-        lastError = await response.text();
-      } catch (err) {
-        lastError = err.message;
-        continue;
+    const response = await fetch(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${req.accessToken}`,
+        'Content-Type': 'application/json'
       }
-    }
-    
-    // Si aucun endpoint ne fonctionne
-    console.error(`❌ All BCF endpoints failed. Last error: ${lastError}`);
-    return res.status(404).json({ 
-      error: 'BCF Topics endpoint not found', 
-      message: 'Tried multiple BCF API versions without success',
-      details: lastError 
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ BCF Topics API Error: ${response.status} - ${errorText}`);
+      return res.status(response.status).json({ error: errorText });
+    }
+
+    const data = await response.json();
+    console.log(`✅ Retrieved ${data.length || 0} BCF topics`);
+    res.json(data);
   } catch (error) {
     console.error('❌ BCF Topics API error:', error.message);
     res.status(500).json({ error: error.message });
@@ -558,10 +539,10 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '5.0.0',
+    version: '5.1.0',
     environment: process.env.ENVIRONMENT || 'production',
     deployed: new Date().toISOString(),
-    note: 'Using Trimble Connect Core API v2.0 and v2.1 (region-aware)',
+    note: 'Using Trimble Connect Core API v2.0, v2.1 and BCF API v2.1',
     supportedRegions: ['us', 'europe', 'asia', 'australia'],
     endpoints: {
       auth: {
@@ -573,7 +554,7 @@ app.get('/', (req, res) => {
       api: {
         files: '/api/projects/:projectId/files (v2.1 folders/items)',
         todos: '/api/projects/:projectId/todos (v2.0)',
-        topics: '/api/projects/:projectId/bcf/topics (v2.0)',
+        topics: '/api/projects/:projectId/bcf/topics (BCF v2.1)',
         views: '/api/projects/:projectId/views (v2.0)'
       }
     }
