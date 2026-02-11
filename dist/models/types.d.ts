@@ -95,6 +95,45 @@ export interface DashboardConfig {
     enableAutoRefresh: boolean;
 }
 /**
+ * Données pour le graphique de priorité BCF
+ */
+export interface BCFPriorityData {
+    high: number;
+    medium: number;
+    low: number;
+}
+/**
+ * Élément d'activité récente pour la timeline
+ */
+export interface ActivityItem {
+    id: string;
+    type: 'file' | 'bcf' | 'note' | 'view';
+    title: string;
+    date: Date;
+    author: string;
+}
+/**
+ * Membre d'équipe avec statistiques de contributions
+ */
+export interface TeamMember {
+    name: string;
+    filesCount: number;
+    bcfCount: number;
+    notesCount: number;
+    viewsCount: number;
+    totalContributions: number;
+    lastActivity: Date;
+}
+/**
+ * Données de tendance pour les métriques (comparaison période courante vs précédente)
+ */
+export interface TrendData {
+    current: number;
+    previous: number;
+    direction: 'up' | 'down' | 'neutral';
+    changeCount: number;
+}
+/**
  * Niveaux de log
  */
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';

@@ -1,26 +1,29 @@
 /**
  * Gestion des graphiques avec Chart.js
+ * shadcn-inspired color scheme + Trimble branding
  */
-import { BCFStatusData, FileTrendDataPoint } from '../models/types';
+import { BCFStatusData, BCFPriorityData, FileTrendDataPoint } from '../models/types';
 export declare class ChartsManager {
     private bcfChart;
     private filesChart;
+    private fileTypeChart;
+    private bcfPriorityChart;
     /**
-     * Créer le graphique de répartition des BCF (Bar Chart)
+     * Créer le graphique de répartition des BCF par statut (Bar Chart)
      */
     createBCFChart(canvasId: string, data: BCFStatusData): void;
     /**
-     * Créer le graphique de tendance des fichiers (Line Chart)
+     * Créer le graphique de priorité BCF (Doughnut)
+     */
+    createBCFPriorityChart(canvasId: string, data: BCFPriorityData): void;
+    /**
+     * Créer le graphique de tendance des fichiers (Line Chart - area)
      */
     createFilesTrendChart(canvasId: string, data: FileTrendDataPoint[]): void;
     /**
-     * Mettre à jour le graphique BCF avec de nouvelles données
+     * Créer le graphique de distribution des types de fichiers (Doughnut)
      */
-    updateBCFChart(data: BCFStatusData): void;
-    /**
-     * Mettre à jour le graphique de tendance avec de nouvelles données
-     */
-    updateFilesTrendChart(data: FileTrendDataPoint[]): void;
+    createFileTypeChart(canvasId: string, byExtension: Record<string, number>): void;
     /**
      * Détruire tous les graphiques
      */
