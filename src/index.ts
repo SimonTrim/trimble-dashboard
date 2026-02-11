@@ -173,17 +173,17 @@ function createSidebarMenu(): void {
 
   const mainMenuObject = {
     title: 'Project Dashboard',
-    icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-48.png',
+    icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png',
     command: 'show_dashboard',
     subMenus: [
       {
         title: 'Vue d\'ensemble',
-        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-48.png',
+        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png',
         command: 'show_overview',
       },
       {
         title: 'Actualiser',
-        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-48.png',
+        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png',
         command: 'refresh_data',
       }
     ],

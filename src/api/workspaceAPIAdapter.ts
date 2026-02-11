@@ -164,17 +164,35 @@ export class WorkspaceAPIAdapter {
           
           const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/files`);
           
-          const files: ProjectFile[] = response.map((file: any) => ({
-            id: file.id,
-            name: file.name || 'Unknown',
-            extension: (file.name || '').split('.').pop() || '',
-            size: file.size || 0,
-            uploadedBy: file.createdBy?.name || 'Unknown',
-            uploadedAt: new Date(file.createdOn || new Date()),
-            lastModified: new Date(file.modifiedOn || file.createdOn || new Date()),
-            path: file.parentPath || '/',
-            downloadUrl: file.downloadUrl || undefined,
-          }));
+          const files: ProjectFile[] = response.map((file: any) => {
+            // Support multiple name field formats
+            const fileName = file.name || file.nm || file.label || 'Unknown';
+            
+            // Support User object format: {firstName, lastName} or {name}
+            const createdBy = file.createdBy 
+              ? (file.createdBy.name || 
+                 [file.createdBy.firstName, file.createdBy.lastName].filter(Boolean).join(' ') || 
+                 file.createdBy.email || 
+                 'Unknown')
+              : (file.modifiedBy 
+                ? (file.modifiedBy.name || 
+                   [file.modifiedBy.firstName, file.modifiedBy.lastName].filter(Boolean).join(' ') || 
+                   file.modifiedBy.email || 
+                   'Unknown')
+                : 'Unknown');
+            
+            return {
+              id: file.id,
+              name: fileName,
+              extension: fileName.includes('.') ? fileName.split('.').pop() || '' : '',
+              size: file.size || file.sz || 0,
+              uploadedBy: createdBy,
+              uploadedAt: new Date(file.createdOn || file.ct || new Date()),
+              lastModified: new Date(file.modifiedOn || file.mt || file.createdOn || new Date()),
+              path: file.parentPath || file.path || '/',
+              downloadUrl: file.downloadUrl || undefined,
+            };
+          });
 
           logger.info(`✅ Retrieved ${files.length} files from REST API`);
           return files;
@@ -231,16 +249,25 @@ export class WorkspaceAPIAdapter {
           const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/todos`);
           
           // Transformer en notre format TrimbleNote
-          const notes: TrimbleNote[] = response.map((todo: any) => ({
-            id: todo.id,
-            title: todo.label || todo.title || 'Sans titre',
-            content: todo.description || '',
-            author: todo.createdBy?.name || 'Unknown',
-            createdAt: new Date(todo.createdOn || new Date()),
-            updatedAt: new Date(todo.modifiedOn || todo.createdOn || new Date()),
-            archived: todo.done || false,
-            projectId: this.projectId,
-          }));
+          const notes: TrimbleNote[] = response.map((todo: any) => {
+            const author = todo.createdBy 
+              ? (todo.createdBy.name || 
+                 [todo.createdBy.firstName, todo.createdBy.lastName].filter(Boolean).join(' ') || 
+                 todo.createdBy.email || 
+                 'Unknown')
+              : 'Unknown';
+            
+            return {
+              id: todo.id,
+              title: todo.label || todo.title || 'Sans titre',
+              content: todo.description || '',
+              author,
+              createdAt: new Date(todo.createdOn || new Date()),
+              updatedAt: new Date(todo.modifiedOn || todo.createdOn || new Date()),
+              archived: todo.done || false,
+              projectId: this.projectId,
+            };
+          });
 
           logger.info(`✅ Retrieved ${notes.length} todos from REST API`);
           return notes;
@@ -313,15 +340,24 @@ export class WorkspaceAPIAdapter {
           const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/views`);
           
           // Transformer en notre format ProjectView
-          const views: ProjectView[] = response.map((view: any) => ({
-            id: view.id,
-            name: view.name || 'Sans nom',
-            description: view.description || undefined,
-            createdBy: view.createdBy?.name || 'Unknown',
-            createdAt: new Date(view.createdOn || new Date()),
-            thumbnail: view.thumbnail || undefined,
-            isDefault: view.isDefault || false,
-          }));
+          const views: ProjectView[] = response.map((view: any) => {
+            const createdBy = view.createdBy 
+              ? (view.createdBy.name || 
+                 [view.createdBy.firstName, view.createdBy.lastName].filter(Boolean).join(' ') || 
+                 view.createdBy.email || 
+                 'Unknown')
+              : 'Unknown';
+            
+            return {
+              id: view.id,
+              name: view.name || 'Sans nom',
+              description: view.description || undefined,
+              createdBy,
+              createdAt: new Date(view.createdOn || new Date()),
+              thumbnail: view.thumbnail || undefined,
+              isDefault: view.isDefault || false,
+            };
+          });
 
           logger.info(`✅ Retrieved ${views.length} views from REST API`);
           return views;

@@ -1,20 +1,21 @@
 /**
  * Vercel Serverless Function - Trimble Dashboard Backend
  * 
- * Version 5.0.0 - Fixed API endpoints based on official trimble-connect-sdk
+ * Version 5.1.0 - Fixed file names + BCF topics dynamic URL discovery
  * 
  * CORRECT Trimble Connect Core API v2.0 endpoints (from SDK source):
  *   - Todos:  GET /tc/api/2.0/todos?projectId={id}
  *   - Views:  GET /tc/api/2.0/views?projectId={id}
  *   - Files:  GET /tc/api/2.0/search?query=*&projectId={id}&type=FILE
  *   - Sync:   GET /tc/api/2.0/sync/{projectId}?excludeVersion=true
- *   - BCF:    GET /tc/api/bcf/2.1/projects/{id}/topics (separate API)
+ *   - BCF:    Dynamic URL from regions API 'topic-api' field
  *   
  * IMPORTANT: Todos, Views use QUERY parameters (?projectId=), NOT path params!
  * Files are accessed via Search API or folder navigation, not /projects/{id}/files
+ * BCF Topics URL is discovered dynamically from GET /tc/api/2.0/regions
  */
 
-console.log('🔵 [Vercel v5.0] Starting serverless function...');
+console.log('🔵 [Vercel v5.1] Starting serverless function...');
 
 const express = require('express');
 const cors = require('cors');
@@ -68,13 +69,100 @@ function getBaseUrl(region) {
 }
 
 /**
- * Get the BCF API base URL for a region
- * @param {string} region - Region code
- * @returns {string} Base URL like "https://app21.connect.trimble.com/tc/api/bcf/2.1"
+ * Cache for regions data (topic-api URLs)
+ * Structure: { data: [...], fetchedAt: timestamp }
  */
-function getBcfBaseUrl(region) {
+let regionsCache = null;
+const REGIONS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Fetch and cache the Trimble Connect regions data
+ * This gives us the dynamic 'topic-api' URL for BCF
+ */
+async function getRegionsData(accessToken) {
+  // Return cached data if fresh
+  if (regionsCache && (Date.now() - regionsCache.fetchedAt) < REGIONS_CACHE_TTL) {
+    return regionsCache.data;
+  }
+
+  // We need to use the master/US endpoint to fetch regions
+  const regionsUrl = `https://${REGIONAL_HOSTS['us']}/tc/api/2.0/regions`;
+  console.log(`🌍 Fetching regions data from: ${regionsUrl}`);
+
+  const response = await fetch(regionsUrl, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    }
+  });
+
+  if (!response.ok) {
+    console.error(`❌ Failed to fetch regions: ${response.status}`);
+    return null;
+  }
+
+  const data = await response.json();
+  const regions = Array.isArray(data) ? data : (data?.data || data);
+  
+  console.log(`✅ Fetched ${regions.length} regions`);
+  regions.forEach(r => {
+    console.log(`   Region: ${r.location} | origin: ${r.origin} | topic-api: ${r['topic-api'] || 'N/A'}`);
+  });
+  
+  regionsCache = { data: regions, fetchedAt: Date.now() };
+  return regions;
+}
+
+/**
+ * Get the BCF/Topic API base URL for a region by querying the regions endpoint
+ * Falls back to constructed URL if regions fetch fails
+ */
+async function getBcfBaseUrl(region, accessToken) {
+  try {
+    const regions = await getRegionsData(accessToken);
+    
+    if (regions) {
+      // Map our region codes to Trimble location names
+      const regionToLocation = {
+        'us': 'northAmerica',
+        'eu': 'europe',
+        'ap': 'asia',
+        'ap-au': 'australia',
+      };
+      
+      const location = regionToLocation[region] || 'europe';
+      
+      // Find matching server by location or origin
+      const host = REGIONAL_HOSTS[region] || REGIONAL_HOSTS['eu'];
+      const server = regions.find(s => 
+        s.location === location || 
+        s.origin === host ||
+        s.origin === `${host}`
+      );
+      
+      if (server && server['topic-api']) {
+        const topicApiUrl = server['topic-api'];
+        console.log(`🔗 BCF Topic API URL from regions: ${topicApiUrl}`);
+        return topicApiUrl;
+      }
+      
+      console.warn(`⚠️ No topic-api found for region ${region}, trying all servers...`);
+      
+      // Try to find any server with topic-api
+      for (const s of regions) {
+        if (s['topic-api']) {
+          console.log(`🔗 Using topic-api from ${s.location}: ${s['topic-api']}`);
+          return s['topic-api'];
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`❌ Failed to get BCF URL from regions: ${error.message}`);
+  }
+  
+  // Fallback: construct URL (may not work, but better than nothing)
   const host = REGIONAL_HOSTS[region] || REGIONAL_HOSTS['eu'];
-  return `https://${host}/tc/api/bcf/2.1`;
+  return `https://${host}/tc/api/2.0`;
 }
 
 // Token store
@@ -401,18 +489,31 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
     let result = await trimbleFetch(searchUrl, req.accessToken);
     
     if (result.ok) {
-      // Search API returns results in different formats
-      let files = [];
+      // Search API returns results in format: [{type: "FILE", details: {id, name, ...}}, ...]
+      // We need to unwrap the 'details' property to get the actual file objects
+      let rawResults = [];
       if (Array.isArray(result.data)) {
-        files = result.data;
-      } else if (result.data?.details) {
-        files = result.data.details;
+        rawResults = result.data;
       } else if (result.data?.data) {
-        files = result.data.data;
+        rawResults = result.data.data;
       } else if (result.data?.items) {
-        files = result.data.items;
+        rawResults = result.data.items;
       }
+      
+      // Unwrap search results: extract 'details' if present
+      const files = rawResults.map(item => {
+        if (item.details) {
+          // Search result format: {type, details: {id, name, size, ...}}
+          return { ...item.details, _searchType: item.type };
+        }
+        // Already a flat file object
+        return item;
+      });
+      
       console.log(`✅ Retrieved ${files.length} files via Search API`);
+      if (files.length > 0) {
+        console.log(`📋 Sample file: ${JSON.stringify(files[0]).substring(0, 300)}`);
+      }
       return res.json(files);
     }
     
@@ -464,24 +565,77 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
 /**
  * GET /api/projects/:projectId/bcf/topics
  * 
- * BCF Topics use a separate API:
- * Correct Trimble endpoint: GET /tc/api/bcf/2.1/projects/{projectId}/topics
+ * BCF Topics use a SEPARATE API whose URL is discovered from the regions endpoint.
+ * The SDK gets the URL from the 'topic-api' field in the regions response.
+ * 
+ * Strategy:
+ * 1. Get the topic-api URL from regions endpoint  
+ * 2. Try: {topic-api}/bcf/2.1/projects/{id}/topics
+ * 3. Fallback: {topic-api}/projects/{id}/topics
+ * 4. Fallback: {base}/topics?projectId={id} (Core API pattern)
  */
 app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const bcfBaseUrl = getBcfBaseUrl(req.region);
-    const apiUrl = `${bcfBaseUrl}/projects/${projectId}/topics`;
     
-    const result = await trimbleFetch(apiUrl, req.accessToken);
+    // Strategy 1: Use dynamic topic-api URL from regions
+    const topicApiBase = await getBcfBaseUrl(req.region, req.accessToken);
+    console.log(`🔧 BCF: Using topic-api base: ${topicApiBase}`);
     
-    if (!result.ok) {
-      return res.status(result.status).json({ error: result.error });
+    // Try BCF 2.1 standard path
+    const bcfUrl1 = `${topicApiBase}/bcf/2.1/projects/${projectId}/topics`;
+    console.log(`🔧 BCF: Trying ${bcfUrl1}`);
+    let result = await trimbleFetch(bcfUrl1, req.accessToken);
+    
+    if (result.ok) {
+      const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+      console.log(`✅ Retrieved ${topics.length} BCF topics via bcf/2.1 path`);
+      return res.json(topics);
     }
-
-    const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-    console.log(`✅ Retrieved ${topics.length} BCF topics`);
-    res.json(topics);
+    console.log(`⚠️ BCF path 1 failed (${result.status})`);
+    
+    // Try without /bcf/2.1/ prefix (some implementations)
+    const bcfUrl2 = `${topicApiBase}/projects/${projectId}/topics`;
+    console.log(`🔧 BCF: Trying ${bcfUrl2}`);
+    result = await trimbleFetch(bcfUrl2, req.accessToken);
+    
+    if (result.ok) {
+      const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+      console.log(`✅ Retrieved ${topics.length} BCF topics via /projects path`);
+      return res.json(topics);
+    }
+    console.log(`⚠️ BCF path 2 failed (${result.status})`);
+    
+    // Strategy 2: Try Core API pattern (topics as query param, like todos)
+    const baseUrl = getBaseUrl(req.region);
+    const bcfUrl3 = `${baseUrl}/topics?projectId=${projectId}`;
+    console.log(`🔧 BCF: Trying Core API pattern: ${bcfUrl3}`);
+    result = await trimbleFetch(bcfUrl3, req.accessToken);
+    
+    if (result.ok) {
+      const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+      console.log(`✅ Retrieved ${topics.length} BCF topics via Core API pattern`);
+      return res.json(topics);
+    }
+    console.log(`⚠️ BCF path 3 failed (${result.status})`);
+    
+    // Strategy 3: Try regional host with bcf prefix
+    const host = REGIONAL_HOSTS[req.region] || REGIONAL_HOSTS['eu'];
+    const bcfUrl4 = `https://${host}/tc/api/2.0/bcf/2.1/projects/${projectId}/topics`;
+    console.log(`🔧 BCF: Trying regional bcf: ${bcfUrl4}`);
+    result = await trimbleFetch(bcfUrl4, req.accessToken);
+    
+    if (result.ok) {
+      const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+      console.log(`✅ Retrieved ${topics.length} BCF topics via regional bcf`);
+      return res.json(topics);
+    }
+    console.log(`⚠️ BCF path 4 failed (${result.status})`);
+    
+    // All strategies failed
+    console.error('❌ All BCF topic strategies failed');
+    return res.status(result.status || 500).json({ error: result.error || 'Failed to fetch BCF topics' });
+    
   } catch (error) {
     console.error('❌ BCF Topics API error:', error.message);
     res.status(500).json({ error: error.message });
@@ -556,7 +710,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    version: '5.0.0',
+    version: '5.1.0',
     environment: ENVIRONMENT,
     activeSessions: tokenStore.size
   });
@@ -565,10 +719,10 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '5.0.0',
+    version: '5.1.0',
     environment: ENVIRONMENT,
     deployed: new Date().toISOString(),
-    note: 'Fixed API endpoints based on official trimble-connect-sdk patterns',
+    note: 'Fixed file names + BCF topics dynamic URL discovery from regions API',
     supportedRegions: Object.keys(REGIONAL_HOSTS),
     endpoints: {
       auth: {
@@ -581,7 +735,7 @@ app.get('/', (req, res) => {
         todos: '/api/projects/:projectId/todos → GET /tc/api/2.0/todos?projectId={id}',
         views: '/api/projects/:projectId/views → GET /tc/api/2.0/views?projectId={id}',
         files: '/api/projects/:projectId/files → GET /tc/api/2.0/search?query=*&projectId={id}&type=FILE',
-        topics: '/api/projects/:projectId/bcf/topics → GET /tc/api/bcf/2.1/projects/{id}/topics'
+        topics: '/api/projects/:projectId/bcf/topics → Dynamic URL from regions topic-api'
       }
     }
   });
@@ -596,6 +750,6 @@ function generateRandomState() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-console.log('✅ [Vercel v5.0] Serverless function initialized');
+console.log('✅ [Vercel v5.1] Serverless function initialized');
 
 module.exports = app;

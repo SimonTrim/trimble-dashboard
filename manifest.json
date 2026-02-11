@@ -9,7 +9,7 @@
       "type": "projectModule",
       "id": "project-dashboard",
       "title": "Dashboard",
-      "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-48.png",
+      "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png",
       "url": "https://simontrim.github.io/trimble-dashboard/public/index.html"
     }
   ],
