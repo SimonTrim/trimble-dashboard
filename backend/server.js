@@ -403,34 +403,55 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
 
 /**
  * GET /api/projects/:projectId/bcf/topics
- * Récupère les BCF topics d'un projet via l'API v2.0
- * Note: Endpoint à vérifier - peut utiliser ?projectId= en query parameter
+ * Récupère les BCF topics d'un projet via l'API BCF v2.1 (buildingSMART standard)
+ * Note: BCF Topics utilise la spécification buildingSMART BCF API v2.1/v3.0
  */
 app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
     const apiBase = TRIMBLE_API_BASE[req.region];
-    // Essayer d'abord avec query parameter (pattern des todos)
-    const apiUrl = `${apiBase}/2.0/bcf/topics?projectId=${projectId}`;
     
-    console.log(`📡 Calling Trimble API: ${apiUrl}`);
+    // BCF API standard: /bcf/2.1/projects/{projectId}/topics
+    // Essayer différentes variantes connues
+    const possibleEndpoints = [
+      `${apiBase}/bcf/2.1/projects/${projectId}/topics`,
+      `${apiBase}/2.0/projects/${projectId}/bcf/2.1/topics`,
+      `${apiBase}/2.0/topics?projectId=${projectId}`,
+    ];
     
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${req.accessToken}`,
-        'Content-Type': 'application/json'
+    let lastError = null;
+    
+    for (const apiUrl of possibleEndpoints) {
+      try {
+        console.log(`📡 Trying BCF endpoint: ${apiUrl}`);
+        
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${req.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`✅ Retrieved ${data.length || 0} BCF topics from: ${apiUrl}`);
+          return res.json(data);
+        }
+        
+        lastError = await response.text();
+      } catch (err) {
+        lastError = err.message;
+        continue;
       }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Trimble API Error: ${response.status} - ${errorText}`);
-      return res.status(response.status).json({ error: errorText });
     }
-
-    const data = await response.json();
-    console.log(`✅ Retrieved ${data.length || 0} BCF topics`);
-    res.json(data);
+    
+    // Si aucun endpoint ne fonctionne
+    console.error(`❌ All BCF endpoints failed. Last error: ${lastError}`);
+    return res.status(404).json({ 
+      error: 'BCF Topics endpoint not found', 
+      message: 'Tried multiple BCF API versions without success',
+      details: lastError 
+    });
   } catch (error) {
     console.error('❌ BCF Topics API error:', error.message);
     res.status(500).json({ error: error.message });
