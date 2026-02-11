@@ -53,11 +53,8 @@ const TRIMBLE_CORE_API = IS_STAGING ? {
   australia: 'https://app-au.connect.trimble.com/tc/api/2.0',
 };
 
-// Base URL pour les APIs spécialisées (Documents, ToDos, Topics, Views)
-// Ces APIs ne dépendent pas de la région
-const TRIMBLE_APIS_BASE = IS_STAGING 
-  ? 'https://app.stage.connect.trimble.com'
-  : 'https://app.connect.trimble.com';
+// Note: Toutes les APIs sont regroupées dans l'API Core v2.0
+// qui varie selon la région (TRIMBLE_CORE_API ci-dessus)
 
 // Stockage temporaire des tokens (EN PRODUCTION: utiliser Redis/Database)
 const tokenStore = new Map();
@@ -307,14 +304,12 @@ async function requireAuth(req, res, next) {
 
 /**
  * GET /api/projects/:projectId/files
- * Récupère les fichiers d'un projet via l'API Organizer v2
- * Note: Retourne les items du dossier racine par défaut
+ * Récupère les fichiers d'un projet via l'API Core v2.0
  */
 app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const folderId = req.query.folderId || 'root'; // Dossier racine par défaut
-    const apiUrl = `${TRIMBLE_APIS_BASE}/organizer/v2/projects/${projectId}/folders/${folderId}/items`;
+    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/files`;
     
     console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
@@ -341,12 +336,12 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
 
 /**
  * GET /api/projects/:projectId/todos
- * Récupère les todos d'un projet via l'API ToDo v1
+ * Récupère les todos d'un projet via l'API Core v2.0
  */
 app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_APIS_BASE}/todo/v1/projects/${projectId}/todos`;
+    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/todos`;
     
     console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
@@ -373,12 +368,12 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
 
 /**
  * GET /api/projects/:projectId/bcf/topics
- * Récupère les BCF topics d'un projet via l'API BCF v2.1
+ * Récupère les BCF topics d'un projet via l'API Core v2.0
  */
 app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_APIS_BASE}/bcf/2.1/projects/${projectId}/topics`;
+    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/bcf/topics`;
     
     console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
@@ -405,12 +400,12 @@ app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => 
 
 /**
  * GET /api/projects/:projectId/views
- * Récupère les vues d'un projet via l'API View v1
+ * Récupère les vues d'un projet via l'API Core v2.0
  */
 app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_APIS_BASE}/view/v1/projects/${projectId}/views`;
+    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/views`;
     
     console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
@@ -499,7 +494,8 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '1.0.0',
+    version: '4.0.0',
+    note: 'Using Trimble Connect Core API v2.0 (region-aware)',
     endpoints: {
       auth: {
         login: '/auth/login',
@@ -508,10 +504,10 @@ app.get('/', (req, res) => {
         logout: '/api/auth/logout'
       },
       api: {
-        files: '/api/projects/:projectId/files (Organizer v2 API)',
-        todos: '/api/projects/:projectId/todos (ToDo v1 API)',
-        topics: '/api/projects/:projectId/bcf/topics (BCF v2.1 API)',
-        views: '/api/projects/:projectId/views (View v1 API)'
+        files: '/api/projects/:projectId/files (Core API v2.0)',
+        todos: '/api/projects/:projectId/todos (Core API v2.0)',
+        topics: '/api/projects/:projectId/bcf/topics (Core API v2.0)',
+        views: '/api/projects/:projectId/views (Core API v2.0)'
       }
     }
   });
@@ -560,10 +556,10 @@ if (!isServerless) {
 ║    - GET  /auth/login         Start OAuth flow            ║
 ║    - GET  /auth/callback      OAuth callback              ║
 ║    - GET  /api/auth/status    Check auth status           ║
-║    - GET  /api/projects/:id/files       (Organizer API)   ║
-║    - GET  /api/projects/:id/todos       (ToDo v1)         ║
-║    - GET  /api/projects/:id/bcf/topics  (BCF v2.1)        ║
-║    - GET  /api/projects/:id/views       (View v1)         ║
+║    - GET  /api/projects/:id/files       (Core API v2.0)   ║
+║    - GET  /api/projects/:id/todos       (Core API v2.0)   ║
+║    - GET  /api/projects/:id/bcf/topics  (Core API v2.0)   ║
+║    - GET  /api/projects/:id/views       (Core API v2.0)   ║
 ║                                                            ║
 ║  ✅ Server is ready!                                       ║
 ╚════════════════════════════════════════════════════════════╝

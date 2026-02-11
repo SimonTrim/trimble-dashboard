@@ -2,15 +2,16 @@
  * Vercel Serverless Function - Trimble Dashboard Backend
  * 
  * Version autonome pour Vercel (ne dépend pas de backend/server.js)
- * Last updated: 2026-01-29
- * Version 3.0.0 - Using correct Trimble API endpoints:
- *   - Organizer v2: /organizer/v2/projects/{id}/folders/{folderId}/items
- *   - ToDo v1: /todo/v1/projects/{id}/todos
- *   - BCF v2.1: /bcf/2.1/projects/{id}/topics
- *   - View v1: /view/v1/projects/{id}/views
+ * Last updated: 2026-02-11
+ * Version 4.0.0 - Using Trimble Connect Core API v2.0:
+ *   - Files: /tc/api/2.0/projects/{id}/files
+ *   - Todos: /tc/api/2.0/projects/{id}/todos
+ *   - BCF Topics: /tc/api/2.0/projects/{id}/bcf/topics
+ *   - Views: /tc/api/2.0/projects/{id}/views
+ *   Note: URLs vary by region (us, eu, ap, ap-au)
  */
 
-console.log('🔵 [Vercel v3.0] Starting serverless function...');
+console.log('🔵 [Vercel v4.0] Starting serverless function...');
 console.log('🔵 [Vercel] Timestamp:', new Date().toISOString());
 
 const express = require('express');
@@ -39,14 +40,9 @@ const TRIMBLE_TOKEN_URL = IS_STAGING
   ? 'https://stage.id.trimble.com/oauth/token'
   : 'https://id.trimble.com/oauth/token';
 
-// Base URLs pour les différentes APIs Trimble Connect
-// Les APIs spécialisées (ToDo, BCF, View, Organizer) ne dépendent PAS de la région
-// Elles sont toutes hébergées sur app.connect.trimble.com
-const TRIMBLE_APIS_BASE = IS_STAGING 
-  ? 'https://app.stage.connect.trimble.com'
-  : 'https://app.connect.trimble.com';
-
-// Core API v2.0 (utilisé uniquement si nécessaire pour d'autres ressources)
+// Base URLs pour Trimble Connect Core API v2.0
+// Cette API regroupe tous les endpoints (files, todos, topics, views)
+// Les URLs varient selon la région du projet
 const TRIMBLE_CORE_API = IS_STAGING ? {
   us: 'https://app.stage.connect.trimble.com/tc/api/2.0',
   eu: 'https://app21.stage.connect.trimble.com/tc/api/2.0',  // Europe
@@ -295,10 +291,10 @@ async function requireAuth(req, res, next) {
 app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const folderId = req.query.folderId || 'root'; // Dossier racine par défaut
-    const apiUrl = `${TRIMBLE_APIS_BASE}/organizer/v2/projects/${projectId}/folders/${folderId}/items`;
+    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/files`;
     
-    console.log(`📡 Calling Trimble Organizer API: ${apiUrl}`);
+    console.log(`📡 Calling Trimble Core API v2.0: ${apiUrl}`);
+    console.log(`🌍 Region: ${req.region}`);
     
     const response = await fetch(apiUrl, {
       headers: {
@@ -324,9 +320,10 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
 app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_APIS_BASE}/todo/v1/projects/${projectId}/todos`;
+    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/todos`;
     
-    console.log(`📡 Calling Trimble ToDo API: ${apiUrl}`);
+    console.log(`📡 Calling Trimble Core API v2.0: ${apiUrl}`);
+    console.log(`🌍 Region: ${req.region}`);
     
     const response = await fetch(apiUrl, {
       headers: {
@@ -352,9 +349,10 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
 app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_APIS_BASE}/bcf/2.1/projects/${projectId}/topics`;
+    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/bcf/topics`;
     
-    console.log(`📡 Calling Trimble BCF API: ${apiUrl}`);
+    console.log(`📡 Calling Trimble Core API v2.0: ${apiUrl}`);
+    console.log(`🌍 Region: ${req.region}`);
     
     const response = await fetch(apiUrl, {
       headers: {
@@ -380,9 +378,10 @@ app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => 
 app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_APIS_BASE}/view/v1/projects/${projectId}/views`;
+    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/views`;
     
-    console.log(`📡 Calling Trimble View API: ${apiUrl}`);
+    console.log(`📡 Calling Trimble Core API v2.0: ${apiUrl}`);
+    console.log(`🌍 Region: ${req.region}`);
     
     const response = await fetch(apiUrl, {
       headers: {
@@ -461,10 +460,11 @@ app.get('/', (req, res) => {
   console.log('✅ Root endpoint called');
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '3.0.0',
+    version: '4.0.0',
     environment: ENVIRONMENT,
     deployed: new Date().toISOString(),
-    note: 'Using correct Trimble API endpoints: ToDo v1, BCF v2.1, View v1, Organizer v2',
+    note: 'Using Trimble Connect Core API v2.0 (region-aware)',
+    supportedRegions: Object.keys(TRIMBLE_CORE_API),
     endpoints: {
       auth: {
         login: '/auth/login',
@@ -473,10 +473,10 @@ app.get('/', (req, res) => {
         logout: '/api/auth/logout'
       },
       api: {
-        files: '/api/projects/:projectId/files (Organizer v2)',
-        todos: '/api/projects/:projectId/todos (ToDo v1)',
-        topics: '/api/projects/:projectId/bcf/topics (BCF v2.1)',
-        views: '/api/projects/:projectId/views (View v1)'
+        files: '/api/projects/:projectId/files (Core API v2.0)',
+        todos: '/api/projects/:projectId/todos (Core API v2.0)',
+        topics: '/api/projects/:projectId/bcf/topics (Core API v2.0)',
+        views: '/api/projects/:projectId/views (Core API v2.0)'
       }
     }
   });
