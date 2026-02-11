@@ -207,7 +207,10 @@ async function requireAuth(req, res, next) {
 
     console.log('🔑 Using Bearer token authentication');
     req.accessToken = accessToken;
-    req.region = 'europe';
+    
+    // Utiliser l'en-tête X-Project-Region envoyé par le frontend
+    req.region = req.headers['x-project-region'] || 'europe'; // Default to 'europe' if not provided
+    console.log(`ℹ️ Project Region set to: ${req.region}`);
     return next();
   }
 

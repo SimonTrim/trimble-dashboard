@@ -117,6 +117,7 @@ export class WorkspaceAPIAdapter {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'X-Project-Region': this.projectLocation, // Envoyer la région du projet au backend
         ...options?.headers,
       },
     });
