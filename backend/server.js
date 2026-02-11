@@ -410,29 +410,62 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
 app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiBase = TRIMBLE_API_BASE[req.region];
     
-    // Endpoint officiel BCF API v2.1 (confirmé par Swagger doc)
-    const apiUrl = `${apiBase}/bcf/2.1/projects/${projectId}/topics`;
+    // Déterminer la base URL selon la région
+    const regionBaseUrls = {
+      us: 'https://app.connect.trimble.com',
+      europe: 'https://app21.connect.trimble.com',
+      asia: 'https://app-asia.connect.trimble.com',
+      australia: 'https://app-au.connect.trimble.com'
+    };
     
-    console.log(`📡 Calling BCF Topics API: ${apiUrl}`);
+    const baseUrl = regionBaseUrls[req.region] || regionBaseUrls.europe;
     
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${req.accessToken}`,
-        'Content-Type': 'application/json'
+    // Essayer d'abord sans /tc/api/ (API BCF peut être à la racine)
+    // puis avec /tc/api/ si le premier échoue
+    const endpoints = [
+      `${baseUrl}/bcf/2.1/projects/${projectId}/topics`,
+      `${baseUrl}/tc/api/bcf/2.1/projects/${projectId}/topics`
+    ];
+    
+    for (const apiUrl of endpoints) {
+      try {
+        console.log(`📡 Trying BCF Topics API: ${apiUrl}`);
+        
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${req.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`✅ Retrieved ${data.length || 0} BCF topics from: ${apiUrl}`);
+          return res.json(data);
+        }
+        
+        // Si 404, essayer le prochain endpoint
+        if (response.status === 404) {
+          console.log(`⚠️ 404 on ${apiUrl}, trying next endpoint...`);
+          continue;
+        }
+        
+        // Pour autres erreurs, retourner immédiatement
+        const errorText = await response.text();
+        console.error(`❌ BCF Topics API Error: ${response.status} - ${errorText}`);
+        return res.status(response.status).json({ error: errorText });
+      } catch (err) {
+        console.error(`❌ Error calling ${apiUrl}:`, err.message);
+        continue;
       }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ BCF Topics API Error: ${response.status} - ${errorText}`);
-      return res.status(response.status).json({ error: errorText });
     }
-
-    const data = await response.json();
-    console.log(`✅ Retrieved ${data.length || 0} BCF topics`);
-    res.json(data);
+    
+    // Si aucun endpoint ne fonctionne
+    return res.status(404).json({ 
+      error: 'BCF Topics not found',
+      message: 'No BCF topics found for this project or endpoint not available'
+    });
   } catch (error) {
     console.error('❌ BCF Topics API error:', error.message);
     res.status(500).json({ error: error.message });
@@ -539,10 +572,10 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '5.1.0',
+    version: '5.2.0',
     environment: process.env.ENVIRONMENT || 'production',
     deployed: new Date().toISOString(),
-    note: 'Using Trimble Connect Core API v2.0, v2.1 and BCF API v2.1',
+    note: 'Using Trimble Connect Core API v2.0, v2.1 and BCF API v2.1 (with fallback)',
     supportedRegions: ['us', 'europe', 'asia', 'australia'],
     endpoints: {
       auth: {
@@ -554,7 +587,7 @@ app.get('/', (req, res) => {
       api: {
         files: '/api/projects/:projectId/files (v2.1 folders/items)',
         todos: '/api/projects/:projectId/todos (v2.0)',
-        topics: '/api/projects/:projectId/bcf/topics (BCF v2.1)',
+        topics: '/api/projects/:projectId/bcf/topics (BCF v2.1 - auto-detect base path)',
         views: '/api/projects/:projectId/views (v2.0)'
       }
     }
