@@ -120,6 +120,20 @@ class ViewsService {
   /**
    * Obtenir des statistiques sur les vues
    */
+  async getThumbnailUrl(viewId: string): Promise<string | null> {
+    try {
+      return await trimbleClient.executeWithRetry(async (api) => {
+        if (api.views && api.views.getThumbnail) {
+          return await api.views.getThumbnail(viewId);
+        }
+        return null;
+      }, 'getThumbnailUrl');
+    } catch (error) {
+      logger.error(`Error fetching thumbnail for view ${viewId}`, { error });
+      return null;
+    }
+  }
+
   async getViewStats(): Promise<{
     total: number;
     withThumbnail: number;

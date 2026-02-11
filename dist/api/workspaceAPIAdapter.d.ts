@@ -86,6 +86,7 @@ export declare class WorkspaceAPIAdapter {
     get views(): {
         getAll: () => Promise<ProjectView[]>;
         get: (id: string) => Promise<ProjectView | null>;
+        getThumbnail: (viewId: string) => Promise<string | null>;
     };
 }
 /**

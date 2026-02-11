@@ -30,6 +30,7 @@ declare class ViewsService {
     /**
      * Obtenir des statistiques sur les vues
      */
+    getThumbnailUrl(viewId: string): Promise<string | null>;
     getViewStats(): Promise<{
         total: number;
         withThumbnail: number;

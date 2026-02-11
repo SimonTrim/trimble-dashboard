@@ -377,6 +377,28 @@ export class WorkspaceAPIAdapter {
           logger.error(`Failed to fetch view ${id}`, { error });
           return null;
         }
+      },
+
+      getThumbnail: async (viewId: string): Promise<string | null> => {
+        try {
+          const token = await this.getAccessToken();
+          const url = `${this.backendUrl}/api/projects/${this.projectId}/views/${viewId}/thumbnail`;
+          
+          const response = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'X-Project-Region': this.projectLocation,
+            },
+          });
+
+          if (!response.ok) return null;
+          
+          const blob = await response.blob();
+          return URL.createObjectURL(blob);
+        } catch (error) {
+          logger.error(`Failed to fetch thumbnail for view ${viewId}`, { error });
+          return null;
+        }
       }
     };
   }

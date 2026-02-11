@@ -567,6 +567,41 @@ app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => 
 });
 
 /**
+ * GET /api/projects/:projectId/views/:viewId/thumbnail
+ * Proxy for view thumbnails (requires auth, so we proxy through backend)
+ */
+app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (req, res) => {
+  try {
+    const { viewId } = req.params;
+    const baseUrl = getBaseUrl(req.region);
+    const thumbnailUrl = `${baseUrl}/views/${viewId}/thumbnail`;
+    
+    console.log(`🖼️ Fetching thumbnail: ${thumbnailUrl}`);
+    
+    const response = await fetch(thumbnailUrl, {
+      headers: {
+        'Authorization': `Bearer ${req.accessToken}`,
+      }
+    });
+
+    if (!response.ok) {
+      console.log(`⚠️ Thumbnail not found for view ${viewId}: ${response.status}`);
+      return res.status(response.status).send('Thumbnail not found');
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/png';
+    const buffer = await response.buffer();
+    
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(buffer);
+  } catch (error) {
+    console.error('❌ Thumbnail error:', error.message);
+    res.status(500).send('Failed to fetch thumbnail');
+  }
+});
+
+/**
  * GET /api/projects/:projectId
  * Get project info
  */
