@@ -1,37 +1,35 @@
 /**
  * Vercel Serverless Function - Trimble Dashboard Backend
  * 
- * Version autonome pour Vercel (ne dépend pas de backend/server.js)
- * Last updated: 2026-02-11
- * Version 4.0.0 - Using Trimble Connect Core API v2.0:
- *   - Files: /tc/api/2.0/projects/{id}/files
- *   - Todos: /tc/api/2.0/projects/{id}/todos
- *   - BCF Topics: /tc/api/2.0/projects/{id}/bcf/topics
- *   - Views: /tc/api/2.0/projects/{id}/views
- *   Note: URLs vary by region (us, eu, ap, ap-au)
+ * Version 5.0.0 - Fixed API endpoints based on official trimble-connect-sdk
+ * 
+ * CORRECT Trimble Connect Core API v2.0 endpoints (from SDK source):
+ *   - Todos:  GET /tc/api/2.0/todos?projectId={id}
+ *   - Views:  GET /tc/api/2.0/views?projectId={id}
+ *   - Files:  GET /tc/api/2.0/search?query=*&projectId={id}&type=FILE
+ *   - Sync:   GET /tc/api/2.0/sync/{projectId}?excludeVersion=true
+ *   - BCF:    GET /tc/api/bcf/2.1/projects/{id}/topics (separate API)
+ *   
+ * IMPORTANT: Todos, Views use QUERY parameters (?projectId=), NOT path params!
+ * Files are accessed via Search API or folder navigation, not /projects/{id}/files
  */
 
-console.log('🔵 [Vercel v4.0] Starting serverless function...');
-console.log('🔵 [Vercel] Timestamp:', new Date().toISOString());
+console.log('🔵 [Vercel v5.0] Starting serverless function...');
 
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 
-console.log('✅ [Vercel] Dependencies loaded');
-
 const app = express();
 
-// Configuration (Staging ou Production selon env)
+// Configuration
 const ENVIRONMENT = process.env.ENVIRONMENT || 'production';
 const IS_STAGING = ENVIRONMENT === 'staging';
 
 console.log('ℹ️ [Vercel] ENVIRONMENT:', ENVIRONMENT);
-console.log('ℹ️ [Vercel] IS_STAGING:', IS_STAGING);
 console.log('ℹ️ [Vercel] CLIENT_ID:', process.env.TRIMBLE_CLIENT_ID ? '✓ SET' : '✗ MISSING');
-console.log('ℹ️ [Vercel] CLIENT_SECRET:', process.env.TRIMBLE_CLIENT_SECRET ? '✓ SET' : '✗ MISSING');
-console.log('ℹ️ [Vercel] REDIRECT_URI:', process.env.TRIMBLE_REDIRECT_URI ? '✓ SET' : '✗ MISSING');
 
+// Auth URLs
 const TRIMBLE_AUTH_URL = IS_STAGING 
   ? 'https://stage.id.trimble.com/oauth/authorize'
   : 'https://id.trimble.com/oauth/authorize';
@@ -40,33 +38,55 @@ const TRIMBLE_TOKEN_URL = IS_STAGING
   ? 'https://stage.id.trimble.com/oauth/token'
   : 'https://id.trimble.com/oauth/token';
 
-// Base URLs pour Trimble Connect Core API v2.0
-// Cette API regroupe tous les endpoints (files, todos, topics, views)
-// Les URLs varient selon la région du projet
-const TRIMBLE_CORE_API = IS_STAGING ? {
-  us: 'https://app.stage.connect.trimble.com/tc/api/2.0',
-  eu: 'https://app21.stage.connect.trimble.com/tc/api/2.0',  // Europe
-  ap: 'https://app31.stage.connect.trimble.com/tc/api/2.0',  // Asia
-  'ap-au': 'https://app32.stage.connect.trimble.com/tc/api/2.0',  // Australia
+/**
+ * Regional base URLs for Trimble Connect Core API
+ * Format: https://{host}/tc/api/2.0/{endpoint}
+ * 
+ * The SDK uses: CONNECT_API_PROTOCOL + origin + CONNECT_API_ROOT + path
+ * Where CONNECT_API_ROOT = '/tc/api/2.0/'
+ */
+const REGIONAL_HOSTS = IS_STAGING ? {
+  us: 'app.stage.connect.trimble.com',
+  eu: 'app21.stage.connect.trimble.com',
+  ap: 'app31.stage.connect.trimble.com',
+  'ap-au': 'app32.stage.connect.trimble.com',
 } : {
-  us: 'https://app.connect.trimble.com/tc/api/2.0',
-  eu: 'https://app21.connect.trimble.com/tc/api/2.0',  // Europe
-  ap: 'https://app31.connect.trimble.com/tc/api/2.0',  // Asia
-  'ap-au': 'https://app32.connect.trimble.com/tc/api/2.0',  // Australia
+  us: 'app.connect.trimble.com',
+  eu: 'app21.connect.trimble.com',
+  ap: 'app31.connect.trimble.com',
+  'ap-au': 'app32.connect.trimble.com',
 };
 
-// Stockage temporaire des tokens
+/**
+ * Get the base API URL for a region
+ * @param {string} region - Region code (us, eu, ap, ap-au)
+ * @returns {string} Base URL like "https://app21.connect.trimble.com/tc/api/2.0"
+ */
+function getBaseUrl(region) {
+  const host = REGIONAL_HOSTS[region] || REGIONAL_HOSTS['eu'];
+  return `https://${host}/tc/api/2.0`;
+}
+
+/**
+ * Get the BCF API base URL for a region
+ * @param {string} region - Region code
+ * @returns {string} Base URL like "https://app21.connect.trimble.com/tc/api/bcf/2.1"
+ */
+function getBcfBaseUrl(region) {
+  const host = REGIONAL_HOSTS[region] || REGIONAL_HOSTS['eu'];
+  return `https://${host}/tc/api/bcf/2.1`;
+}
+
+// Token store
 const tokenStore = new Map();
 
 /**
- * Convertir la location du projet en code de région pour l'API
- * @param {string} location - La location du projet (ex: "europe", "northAmerica", "asia", "australia")
- * @returns {string} Le code de région (ex: "eu", "us", "ap", "ap-au")
+ * Convert project location string to region code
  */
 function getRegionCode(location) {
   const locationToRegion = {
-    'northAmerica': 'us',
     'northamerica': 'us',
+    'northAmerica': 'us',
     'us': 'us',
     'europe': 'eu',
     'eu': 'eu',
@@ -77,13 +97,12 @@ function getRegionCode(location) {
   };
   
   const normalized = (location || 'europe').toLowerCase().trim();
-  const regionCode = locationToRegion[normalized] || 'eu'; // Default to EU if unknown
-  
-  console.log(`🌍 Location "${location}" mapped to region code "${regionCode}"`);
+  const regionCode = locationToRegion[normalized] || 'eu';
+  console.log(`🌍 Location "${location}" → Region "${regionCode}"`);
   return regionCode;
 }
 
-// Configuration CORS
+// CORS configuration
 const allowedOrigins = [
   'http://localhost:8080',
   'http://localhost:3001',
@@ -106,12 +125,12 @@ app.use(express.json());
 
 // Logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  console.log(`📨 ${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
 // ========================================
-// ROUTES D'AUTHENTIFICATION OAuth2
+// AUTH ROUTES
 // ========================================
 
 app.get('/auth/login', (req, res) => {
@@ -128,8 +147,7 @@ app.get('/auth/login', (req, res) => {
     state: `${state}:${sessionId}`
   });
 
-  const authUrl = `${TRIMBLE_AUTH_URL}?${params.toString()}`;
-  res.redirect(authUrl);
+  res.redirect(`${TRIMBLE_AUTH_URL}?${params.toString()}`);
 });
 
 app.get('/callback', async (req, res) => {
@@ -222,14 +240,14 @@ async function refreshAccessToken(refreshToken) {
 }
 
 // ========================================
-// MIDDLEWARE D'AUTHENTIFICATION
+// AUTH MIDDLEWARE
 // ========================================
 
 async function requireAuth(req, res, next) {
   const authHeader = req.headers['authorization'];
   const sessionId = req.headers['x-session-id'];
 
-  // Mode Bearer Token (intégré)
+  // Mode 1: Bearer Token (integrated mode - from Trimble Connect extension)
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const accessToken = authHeader.substring(7);
     
@@ -240,14 +258,14 @@ async function requireAuth(req, res, next) {
     console.log('🔑 Using Bearer token authentication');
     req.accessToken = accessToken;
     
-    // Utiliser l'en-tête X-Project-Region envoyé par le frontend et le convertir en code de région
+    // Read region from X-Project-Region header sent by the frontend
     const projectLocation = req.headers['x-project-region'] || 'europe';
     req.region = getRegionCode(projectLocation);
-    console.log(`ℹ️ Project Location "${projectLocation}" → Region code "${req.region}"`);
+    console.log(`📍 Region from header: "${projectLocation}" → "${req.region}"`);
     return next();
   }
 
-  // Mode Session ID
+  // Mode 2: Session ID (standalone mode with OAuth)
   if (!sessionId) {
     return res.status(401).json({ error: 'Missing session ID or authorization header' });
   }
@@ -258,157 +276,249 @@ async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
-  // Vérifier expiration
-  const now = Date.now();
-  const expiryWithMargin = tokenData.expiresAt - (5 * 60 * 1000);
-
-  if (now >= expiryWithMargin) {
+  // Check token expiration (with 5min margin)
+  if (Date.now() >= tokenData.expiresAt - (5 * 60 * 1000)) {
     try {
       console.log('🔄 Token expired - Refreshing...');
       const newTokens = await refreshAccessToken(tokenData.refreshToken);
-      
       tokenData.accessToken = newTokens.access_token;
       tokenData.refreshToken = newTokens.refresh_token;
       tokenData.expiresAt = Date.now() + (newTokens.expires_in * 1000);
-      
       tokenStore.set(`tokens_${sessionId}`, tokenData);
       console.log('✅ Token refreshed successfully');
     } catch (error) {
       console.error('❌ Token refresh failed:', error.message);
-      return res.status(401).json({ error: 'Token refresh failed - Please re-authenticate' });
+      return res.status(401).json({ error: 'Token refresh failed' });
     }
   }
 
   req.accessToken = tokenData.accessToken;
-  req.region = tokenData.region;
+  req.region = tokenData.region || 'eu';
   next();
 }
 
-// ========================================
-// API ROUTES (PROXY TRIMBLE CONNECT)
-// ========================================
-
-app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/files`;
-    
-    console.log(`📡 Calling Trimble Core API v2.0: ${apiUrl}`);
-    console.log(`🌍 Region: ${req.region}`);
-    
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${req.accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Trimble API Error: ${response.status} - ${errorText}`);
-      return res.status(response.status).json({ error: errorText });
+/**
+ * Helper: Make an authenticated request to Trimble Connect API
+ */
+async function trimbleFetch(url, accessToken, options = {}) {
+  console.log(`📡 Trimble API: GET ${url}`);
+  
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
     }
+  });
 
-    const data = await response.json();
-    res.json(data);
-  } catch (error) {
-    console.error('❌ Files API error:', error.message);
-    res.status(500).json({ error: error.message });
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`❌ Trimble API Error ${response.status}: ${errorText.substring(0, 200)}`);
+    return { ok: false, status: response.status, error: errorText };
   }
-});
 
+  const data = await response.json();
+  return { ok: true, data };
+}
+
+// ========================================
+// API ROUTES (PROXY TO TRIMBLE CONNECT)
+// ========================================
+
+/**
+ * GET /api/projects/:projectId/todos
+ * 
+ * Correct Trimble endpoint: GET /tc/api/2.0/todos?projectId={projectId}
+ * (Uses QUERY parameter, NOT path parameter!)
+ */
 app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/todos`;
+    const baseUrl = getBaseUrl(req.region);
+    const apiUrl = `${baseUrl}/todos?projectId=${projectId}`;
     
-    console.log(`📡 Calling Trimble Core API v2.0: ${apiUrl}`);
-    console.log(`🌍 Region: ${req.region}`);
+    const result = await trimbleFetch(apiUrl, req.accessToken);
     
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${req.accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Trimble API Error: ${response.status} - ${errorText}`);
-      return res.status(response.status).json({ error: errorText });
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error });
     }
 
-    const data = await response.json();
-    res.json(data);
+    const todos = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+    console.log(`✅ Retrieved ${todos.length} todos`);
+    res.json(todos);
   } catch (error) {
     console.error('❌ Todos API error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/bcf/topics`;
-    
-    console.log(`📡 Calling Trimble Core API v2.0: ${apiUrl}`);
-    console.log(`🌍 Region: ${req.region}`);
-    
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${req.accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Trimble API Error: ${response.status} - ${errorText}`);
-      return res.status(response.status).json({ error: errorText });
-    }
-
-    const data = await response.json();
-    res.json(data);
-  } catch (error) {
-    console.error('❌ BCF Topics API error:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
+/**
+ * GET /api/projects/:projectId/views
+ * 
+ * Correct Trimble endpoint: GET /tc/api/2.0/views?projectId={projectId}
+ * (Uses QUERY parameter, NOT path parameter!)
+ */
 app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/views`;
+    const baseUrl = getBaseUrl(req.region);
+    const apiUrl = `${baseUrl}/views?projectId=${projectId}`;
     
-    console.log(`📡 Calling Trimble Core API v2.0: ${apiUrl}`);
-    console.log(`🌍 Region: ${req.region}`);
+    const result = await trimbleFetch(apiUrl, req.accessToken);
     
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${req.accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Trimble API Error: ${response.status} - ${errorText}`);
-      return res.status(response.status).json({ error: errorText });
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error });
     }
 
-    const data = await response.json();
-    res.json(data);
+    const views = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+    console.log(`✅ Retrieved ${views.length} views`);
+    res.json(views);
   } catch (error) {
     console.error('❌ Views API error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
+/**
+ * GET /api/projects/:projectId/files
+ * 
+ * Strategy: Use the Search API to find all files in the project
+ * Correct Trimble endpoint: GET /tc/api/2.0/search?query=*&projectId={projectId}&type=FILE
+ * 
+ * Fallback: Use sync endpoint to get the file system structure
+ * GET /tc/api/2.0/sync/{projectId}?excludeVersion=true
+ */
+app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const baseUrl = getBaseUrl(req.region);
+    
+    // Strategy 1: Try Search API
+    const searchUrl = `${baseUrl}/search?query=*&projectId=${projectId}&type=FILE`;
+    console.log(`📁 Trying Search API for files...`);
+    
+    let result = await trimbleFetch(searchUrl, req.accessToken);
+    
+    if (result.ok) {
+      // Search API returns results in different formats
+      let files = [];
+      if (Array.isArray(result.data)) {
+        files = result.data;
+      } else if (result.data?.details) {
+        files = result.data.details;
+      } else if (result.data?.data) {
+        files = result.data.data;
+      } else if (result.data?.items) {
+        files = result.data.items;
+      }
+      console.log(`✅ Retrieved ${files.length} files via Search API`);
+      return res.json(files);
+    }
+    
+    console.log(`⚠️ Search API failed (${result.status}), trying Sync API...`);
+    
+    // Strategy 2: Fallback to Sync API (returns file system structure)
+    const syncUrl = `${baseUrl}/sync/${projectId}?excludeVersion=true`;
+    result = await trimbleFetch(syncUrl, req.accessToken);
+    
+    if (result.ok) {
+      // Sync returns all items (files + folders), filter to files only
+      let items = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+      const files = items.filter(item => item.type === 'FILE');
+      console.log(`✅ Retrieved ${files.length} files via Sync API (from ${items.length} items)`);
+      return res.json(files);
+    }
+    
+    console.log(`⚠️ Sync API also failed (${result.status})`);
+    
+    // Strategy 3: Try getting root folder and listing its items
+    const projectUrl = `${baseUrl}/projects/${projectId}`;
+    const projectResult = await trimbleFetch(projectUrl, req.accessToken);
+    
+    if (projectResult.ok && projectResult.data) {
+      const rootId = projectResult.data.rootId;
+      if (rootId) {
+        const folderUrl = `${baseUrl}/folders/${rootId}/items`;
+        const folderResult = await trimbleFetch(folderUrl, req.accessToken);
+        
+        if (folderResult.ok) {
+          let items = Array.isArray(folderResult.data) ? folderResult.data : (folderResult.data?.data || []);
+          const files = items.filter(item => item.type === 'FILE');
+          console.log(`✅ Retrieved ${files.length} files via Folder API`);
+          return res.json(files);
+        }
+      }
+    }
+    
+    // All strategies failed
+    console.error('❌ All file fetching strategies failed');
+    return res.status(result.status || 500).json({ error: result.error || 'Failed to fetch files' });
+    
+  } catch (error) {
+    console.error('❌ Files API error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/bcf/topics
+ * 
+ * BCF Topics use a separate API:
+ * Correct Trimble endpoint: GET /tc/api/bcf/2.1/projects/{projectId}/topics
+ */
+app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const bcfBaseUrl = getBcfBaseUrl(req.region);
+    const apiUrl = `${bcfBaseUrl}/projects/${projectId}/topics`;
+    
+    const result = await trimbleFetch(apiUrl, req.accessToken);
+    
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error });
+    }
+
+    const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+    console.log(`✅ Retrieved ${topics.length} BCF topics`);
+    res.json(topics);
+  } catch (error) {
+    console.error('❌ BCF Topics API error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId
+ * Get project info
+ */
+app.get('/api/projects/:projectId', requireAuth, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const baseUrl = getBaseUrl(req.region);
+    const apiUrl = `${baseUrl}/projects/${projectId}`;
+    
+    const result = await trimbleFetch(apiUrl, req.accessToken);
+    
+    if (!result.ok) {
+      return res.status(result.status).json({ error: result.error });
+    }
+
+    res.json(result.data);
+  } catch (error) {
+    console.error('❌ Project API error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// AUTH STATUS ROUTES
+// ========================================
+
 app.get('/api/auth/status', (req, res) => {
   const sessionId = req.headers['x-session-id'] || req.query.session;
   
   if (!sessionId) {
-    console.log('❌ /api/auth/status - No session ID provided');
     return res.json({ authenticated: false });
   }
 
@@ -416,7 +526,6 @@ app.get('/api/auth/status', (req, res) => {
   const authenticated = !!tokenData && Date.now() < tokenData.expiresAt;
 
   if (authenticated && tokenData) {
-    console.log(`✅ /api/auth/status - Session authenticated`);
     res.json({ 
       authenticated: true,
       tokens: {
@@ -427,72 +536,66 @@ app.get('/api/auth/status', (req, res) => {
       }
     });
   } else {
-    console.log(`❌ /api/auth/status - Session not authenticated`);
     res.json({ authenticated: false });
   }
 });
 
 app.post('/api/auth/logout', (req, res) => {
   const sessionId = req.headers['x-session-id'];
-  
   if (sessionId) {
     tokenStore.delete(`tokens_${sessionId}`);
   }
-
   res.json({ success: true });
 });
 
 // ========================================
-// ROUTES DE SANTÉ
+// HEALTH / INFO ROUTES
 // ========================================
 
 app.get('/health', (req, res) => {
-  console.log('✅ Health check called');
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
+    version: '5.0.0',
     environment: ENVIRONMENT,
     activeSessions: tokenStore.size
   });
 });
 
 app.get('/', (req, res) => {
-  console.log('✅ Root endpoint called');
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '4.0.0',
+    version: '5.0.0',
     environment: ENVIRONMENT,
     deployed: new Date().toISOString(),
-    note: 'Using Trimble Connect Core API v2.0 (region-aware)',
-    supportedRegions: Object.keys(TRIMBLE_CORE_API),
+    note: 'Fixed API endpoints based on official trimble-connect-sdk patterns',
+    supportedRegions: Object.keys(REGIONAL_HOSTS),
     endpoints: {
       auth: {
         login: '/auth/login',
         callback: '/callback',
-        status: '/api/auth/status',
-        logout: '/api/auth/logout'
+        status: '/api/auth/status'
       },
       api: {
-        files: '/api/projects/:projectId/files (Core API v2.0)',
-        todos: '/api/projects/:projectId/todos (Core API v2.0)',
-        topics: '/api/projects/:projectId/bcf/topics (Core API v2.0)',
-        views: '/api/projects/:projectId/views (Core API v2.0)'
+        project: '/api/projects/:projectId → GET /tc/api/2.0/projects/{id}',
+        todos: '/api/projects/:projectId/todos → GET /tc/api/2.0/todos?projectId={id}',
+        views: '/api/projects/:projectId/views → GET /tc/api/2.0/views?projectId={id}',
+        files: '/api/projects/:projectId/files → GET /tc/api/2.0/search?query=*&projectId={id}&type=FILE',
+        topics: '/api/projects/:projectId/bcf/topics → GET /tc/api/bcf/2.1/projects/{id}/topics'
       }
     }
   });
 });
 
 // ========================================
-// UTILITAIRES
+// UTILITIES
 // ========================================
 
 function generateRandomState() {
-  return Array.from(crypto.getRandomValues(new Uint8Array(32)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  const crypto = require('crypto');
+  return crypto.randomBytes(32).toString('hex');
 }
 
-console.log('✅ [Vercel] Serverless function initialized successfully');
+console.log('✅ [Vercel v5.0] Serverless function initialized');
 
-// Export pour Vercel
 module.exports = app;
