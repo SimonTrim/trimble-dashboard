@@ -306,60 +306,40 @@ async function requireAuth(req, res, next) {
 
 /**
  * GET /api/projects/:projectId/files
- * Récupère les fichiers d'un projet via l'API v2.1 folders
- * 1. Récupère d'abord le projet pour obtenir le rootId
- * 2. Liste les items du dossier racine
+ * Récupère les fichiers d'un projet via l'API Search v2.0
+ * Endpoint: GET /tc/api/2.0/search?projectId={projectId}&query=*&type=FILE
+ * Note: Utilise l'API Search avec filter type=FILE pour récupérer tous les fichiers
  */
 app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
     const apiBase = TRIMBLE_API_BASE[req.region];
     
-    // Étape 1: Récupérer le projet pour obtenir le rootId
-    console.log(`📡 Step 1: Getting project info for ${projectId}`);
-    const projectUrl = `${apiBase}/2.0/projects/${projectId}`;
+    // Utiliser l'API Search pour récupérer tous les fichiers
+    const apiUrl = `${apiBase}/2.0/search?projectId=${projectId}&query=*&type=FILE`;
     
-    const projectResponse = await fetch(projectUrl, {
+    console.log(`📡 Calling Trimble Search API: ${apiUrl}`);
+    
+    const response = await fetch(apiUrl, {
       headers: {
         'Authorization': `Bearer ${req.accessToken}`,
         'Content-Type': 'application/json'
       }
     });
 
-    if (!projectResponse.ok) {
-      const errorText = await projectResponse.text();
-      console.error(`❌ Project API Error: ${projectResponse.status} - ${errorText}`);
-      return res.status(projectResponse.status).json({ error: errorText });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Trimble API Error: ${response.status} - ${errorText}`);
+      return res.status(response.status).json({ error: errorText });
     }
 
-    const projectData = await projectResponse.json();
-    const rootId = projectData.rootId;
+    const data = await response.json();
     
-    if (!rootId) {
-      console.error('❌ No rootId found in project data');
-      return res.status(500).json({ error: 'Project rootId not found' });
-    }
-
-    // Étape 2: Récupérer les items du dossier racine
-    console.log(`📡 Step 2: Getting files from root folder ${rootId}`);
-    const filesUrl = `${apiBase}/2.1/folders/${rootId}/items`;
+    // L'API Search retourne un objet avec une propriété "details" contenant les résultats
+    const files = data.details || [];
     
-    const filesResponse = await fetch(filesUrl, {
-      headers: {
-        'Authorization': `Bearer ${req.accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!filesResponse.ok) {
-      const errorText = await filesResponse.text();
-      console.error(`❌ Files API Error: ${filesResponse.status} - ${errorText}`);
-      return res.status(filesResponse.status).json({ error: errorText });
-    }
-
-    const data = await filesResponse.json();
-    console.log(`✅ Retrieved ${data.length || 0} items from root folder`);
-    res.json(data);
+    console.log(`✅ Retrieved ${files.length} files via Search API`);
+    res.json(files);
   } catch (error) {
     console.error('❌ Files API error:', error.message);
     res.status(500).json({ error: error.message });
@@ -403,69 +383,36 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
 
 /**
  * GET /api/projects/:projectId/bcf/topics
- * Récupère les BCF topics d'un projet via l'API BCF v2.1 (buildingSMART standard)
+ * Récupère les BCF topics d'un projet via l'API BCF v2.1
  * Documentation: https://app.swaggerhub.com/apis/Trimble-Connect/topic/v2
- * Endpoint officiel: /bcf/2.1/projects/{projectId}/topics
+ * Endpoint: GET /tc/api/bcf/2.1/projects/{projectId}/topics
  */
 app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
+    const apiBase = TRIMBLE_API_BASE[req.region];
     
-    // Déterminer la base URL selon la région
-    const regionBaseUrls = {
-      us: 'https://app.connect.trimble.com',
-      europe: 'https://app21.connect.trimble.com',
-      asia: 'https://app-asia.connect.trimble.com',
-      australia: 'https://app-au.connect.trimble.com'
-    };
+    // Endpoint BCF API v2.1 avec préfixe /tc/api/
+    const apiUrl = `${apiBase}/bcf/2.1/projects/${projectId}/topics`;
     
-    const baseUrl = regionBaseUrls[req.region] || regionBaseUrls.europe;
+    console.log(`📡 Calling BCF Topics API: ${apiUrl}`);
     
-    // Essayer d'abord sans /tc/api/ (API BCF peut être à la racine)
-    // puis avec /tc/api/ si le premier échoue
-    const endpoints = [
-      `${baseUrl}/bcf/2.1/projects/${projectId}/topics`,
-      `${baseUrl}/tc/api/bcf/2.1/projects/${projectId}/topics`
-    ];
-    
-    for (const apiUrl of endpoints) {
-      try {
-        console.log(`📡 Trying BCF Topics API: ${apiUrl}`);
-        
-        const response = await fetch(apiUrl, {
-          headers: {
-            'Authorization': `Bearer ${req.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`✅ Retrieved ${data.length || 0} BCF topics from: ${apiUrl}`);
-          return res.json(data);
-        }
-        
-        // Si 404, essayer le prochain endpoint
-        if (response.status === 404) {
-          console.log(`⚠️ 404 on ${apiUrl}, trying next endpoint...`);
-          continue;
-        }
-        
-        // Pour autres erreurs, retourner immédiatement
-        const errorText = await response.text();
-        console.error(`❌ BCF Topics API Error: ${response.status} - ${errorText}`);
-        return res.status(response.status).json({ error: errorText });
-      } catch (err) {
-        console.error(`❌ Error calling ${apiUrl}:`, err.message);
-        continue;
+    const response = await fetch(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${req.accessToken}`,
+        'Content-Type': 'application/json'
       }
-    }
-    
-    // Si aucun endpoint ne fonctionne
-    return res.status(404).json({ 
-      error: 'BCF Topics not found',
-      message: 'No BCF topics found for this project or endpoint not available'
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ BCF Topics API Error: ${response.status} - ${errorText}`);
+      return res.status(response.status).json({ error: errorText });
+    }
+
+    const data = await response.json();
+    console.log(`✅ Retrieved ${data.length || 0} BCF topics`);
+    res.json(data);
   } catch (error) {
     console.error('❌ BCF Topics API error:', error.message);
     res.status(500).json({ error: error.message });
@@ -572,10 +519,10 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '5.2.0',
+    version: '6.0.0',
     environment: process.env.ENVIRONMENT || 'production',
     deployed: new Date().toISOString(),
-    note: 'Using Trimble Connect Core API v2.0, v2.1 and BCF API v2.1 (with fallback)',
+    note: 'Using Trimble Connect Search API v2.0 and BCF API v2.1',
     supportedRegions: ['us', 'europe', 'asia', 'australia'],
     endpoints: {
       auth: {
@@ -585,9 +532,9 @@ app.get('/', (req, res) => {
         logout: '/api/auth/logout'
       },
       api: {
-        files: '/api/projects/:projectId/files (v2.1 folders/items)',
+        files: '/api/projects/:projectId/files (Search API with type=FILE)',
         todos: '/api/projects/:projectId/todos (v2.0)',
-        topics: '/api/projects/:projectId/bcf/topics (BCF v2.1 - auto-detect base path)',
+        topics: '/api/projects/:projectId/bcf/topics (BCF v2.1)',
         views: '/api/projects/:projectId/views (v2.0)'
       }
     }
