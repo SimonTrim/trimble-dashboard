@@ -307,12 +307,14 @@ async function requireAuth(req, res, next) {
 
 /**
  * GET /api/projects/:projectId/files
- * Récupère les fichiers d'un projet via l'API Core v2.0
+ * Récupère les fichiers d'un projet via l'API Organizer v2
+ * Note: Retourne les items du dossier racine par défaut
  */
 app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/files`;
+    const folderId = req.query.folderId || 'root'; // Dossier racine par défaut
+    const apiUrl = `${TRIMBLE_APIS_BASE}/organizer/v2/projects/${projectId}/folders/${folderId}/items`;
     
     console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
@@ -339,12 +341,12 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
 
 /**
  * GET /api/projects/:projectId/todos
- * Récupère les todos d'un projet via l'API Core v2.0
+ * Récupère les todos d'un projet via l'API ToDo v1
  */
 app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/todos`;
+    const apiUrl = `${TRIMBLE_APIS_BASE}/todo/v1/projects/${projectId}/todos`;
     
     console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
@@ -370,13 +372,13 @@ app.get('/api/projects/:projectId/todos', requireAuth, async (req, res) => {
 });
 
 /**
- * GET /api/projects/:projectId/topics
- * Récupère les BCF topics d'un projet via l'API Core v2.0
+ * GET /api/projects/:projectId/bcf/topics
+ * Récupère les BCF topics d'un projet via l'API BCF v2.1
  */
-app.get('/api/projects/:projectId/topics', requireAuth, async (req, res) => {
+app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/topics`;
+    const apiUrl = `${TRIMBLE_APIS_BASE}/bcf/2.1/projects/${projectId}/topics`;
     
     console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
@@ -396,19 +398,19 @@ app.get('/api/projects/:projectId/topics', requireAuth, async (req, res) => {
     const data = await response.json();
     res.json(data);
   } catch (error) {
-    console.error('❌ Topics API error:', error.message);
+    console.error('❌ BCF Topics API error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
 /**
  * GET /api/projects/:projectId/views
- * Récupère les vues d'un projet via l'API Core v2.0
+ * Récupère les vues d'un projet via l'API View v1
  */
 app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    const apiUrl = `${TRIMBLE_CORE_API[req.region]}/projects/${projectId}/views`;
+    const apiUrl = `${TRIMBLE_APIS_BASE}/view/v1/projects/${projectId}/views`;
     
     console.log(`📡 Calling Trimble API: ${apiUrl}`);
     
@@ -506,10 +508,10 @@ app.get('/', (req, res) => {
         logout: '/api/auth/logout'
       },
       api: {
-        files: '/api/projects/:projectId/files',
-        todos: '/api/projects/:projectId/todos',
-        topics: '/api/projects/:projectId/topics',
-        views: '/api/projects/:projectId/views'
+        files: '/api/projects/:projectId/files (Organizer v2 API)',
+        todos: '/api/projects/:projectId/todos (ToDo v1 API)',
+        topics: '/api/projects/:projectId/bcf/topics (BCF v2.1 API)',
+        views: '/api/projects/:projectId/views (View v1 API)'
       }
     }
   });
@@ -558,7 +560,10 @@ if (!isServerless) {
 ║    - GET  /auth/login         Start OAuth flow            ║
 ║    - GET  /auth/callback      OAuth callback              ║
 ║    - GET  /api/auth/status    Check auth status           ║
-║    - GET  /api/projects/...   Trimble API proxy           ║
+║    - GET  /api/projects/:id/files       (Organizer API)   ║
+║    - GET  /api/projects/:id/todos       (ToDo v1)         ║
+║    - GET  /api/projects/:id/bcf/topics  (BCF v2.1)        ║
+║    - GET  /api/projects/:id/views       (View v1)         ║
 ║                                                            ║
 ║  ✅ Server is ready!                                       ║
 ╚════════════════════════════════════════════════════════════╝
