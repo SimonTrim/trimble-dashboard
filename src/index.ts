@@ -30,7 +30,6 @@ interface WorkspaceAPIInstance {
 
 let workspaceAPI: WorkspaceAPIInstance | null = null;
 let dashboard: Dashboard | null = null;
-let isDashboardVisible = false;
 let isStandaloneMode = false;
 
 /**
@@ -98,15 +97,14 @@ async function initializeStandalone(): Promise<void> {
   // Créer et afficher le dashboard
   logger.info('Creating dashboard...');
   dashboard = new Dashboard('app', {
-    refreshInterval: 30000,
+    refreshInterval: 0,
     recentFilesThreshold: 48,
     maxRecentFilesDisplay: 10,
-    enableAutoRefresh: true,
+    enableAutoRefresh: false,
   });
 
   // Afficher le dashboard
   await dashboard.render();
-  isDashboardVisible = true;
   
   logger.info('✅ Extension ready in standalone mode!');
 }
@@ -268,16 +266,10 @@ async function showDashboard(): Promise<void> {
     return;
   }
 
-  if (isDashboardVisible) {
-    logger.info('Dashboard already visible');
-    return;
-  }
-
   try {
-    logger.info('Showing dashboard...');
+    logger.info('Showing/refreshing dashboard...');
     await dashboard.render();
-    isDashboardVisible = true;
-    logger.info('✓ Dashboard displayed');
+    logger.info('✓ Dashboard displayed/refreshed');
   } catch (error) {
     logger.error('Failed to show dashboard', { error });
   }
@@ -497,14 +489,13 @@ async function initializeWithToken(accessToken: string, projectInfo: any): Promi
   // Créer et afficher le dashboard
   logger.info('Creating dashboard...');
   dashboard = new Dashboard('app', {
-    refreshInterval: 30000,
+    refreshInterval: 0,
     recentFilesThreshold: 48,
     maxRecentFilesDisplay: 10,
-    enableAutoRefresh: true,
+    enableAutoRefresh: false,
   });
 
   await dashboard.render();
-  isDashboardVisible = true;
   
   logger.info('✅ Extension ready with Trimble Connect authentication!');
 }

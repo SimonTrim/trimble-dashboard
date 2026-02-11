@@ -1,21 +1,23 @@
 /**
  * Vercel Serverless Function - Trimble Dashboard Backend
  * 
- * Version 5.1.0 - Fixed file names + BCF topics dynamic URL discovery
+ * Version 5.2.0 - Fixed BCF Topics using correct openXX.connect.trimble.com servers
  * 
  * CORRECT Trimble Connect Core API v2.0 endpoints (from SDK source):
  *   - Todos:  GET /tc/api/2.0/todos?projectId={id}
  *   - Views:  GET /tc/api/2.0/views?projectId={id}
  *   - Files:  GET /tc/api/2.0/search?query=*&projectId={id}&type=FILE
  *   - Sync:   GET /tc/api/2.0/sync/{projectId}?excludeVersion=true
- *   - BCF:    Dynamic URL from regions API 'topic-api' field
+ *   
+ * BCF Topics API (from Swagger: https://app.swaggerhub.com/apis/Trimble-Connect/topic/v2):
+ *   - Servers: openXX.connect.trimble.com (NOT appXX!)
+ *   - Endpoint: GET /bcf/3.0/projects/{id}/topics (or /bcf/2.1/...)
  *   
  * IMPORTANT: Todos, Views use QUERY parameters (?projectId=), NOT path params!
  * Files are accessed via Search API or folder navigation, not /projects/{id}/files
- * BCF Topics URL is discovered dynamically from GET /tc/api/2.0/regions
  */
 
-console.log('🔵 [Vercel v5.1] Starting serverless function...');
+console.log('🔵 [Vercel v5.2] Starting serverless function...');
 
 const express = require('express');
 const cors = require('cors');
@@ -69,100 +71,33 @@ function getBaseUrl(region) {
 }
 
 /**
- * Cache for regions data (topic-api URLs)
- * Structure: { data: [...], fetchedAt: timestamp }
+ * BCF Topics API hosts (from Swagger: Trimble-Connect/topic/v2)
+ * These are DIFFERENT from the Core API hosts (appXX → openXX)
+ * 
+ * Core API:  https://app21.connect.trimble.com/tc/api/2.0/...
+ * BCF API:   https://open21.connect.trimble.com/bcf/3.0/...
  */
-let regionsCache = null;
-const REGIONS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const BCF_HOSTS = IS_STAGING ? {
+  us: 'open11.stage.connect.trimble.com',
+  eu: 'open21.stage.connect.trimble.com',
+  ap: 'open31.stage.connect.trimble.com',
+  'ap-au': 'open32.stage.connect.trimble.com',
+} : {
+  us: 'open11.connect.trimble.com',
+  eu: 'open21.connect.trimble.com',
+  ap: 'open31.connect.trimble.com',
+  'ap-au': 'open32.connect.trimble.com',
+};
 
 /**
- * Fetch and cache the Trimble Connect regions data
- * This gives us the dynamic 'topic-api' URL for BCF
+ * Get the BCF/Topic API base URL for a region
+ * Uses the openXX.connect.trimble.com servers from the official Swagger docs
+ * @param {string} region - Region code (us, eu, ap, ap-au)
+ * @returns {string} Base URL like "https://open21.connect.trimble.com"
  */
-async function getRegionsData(accessToken) {
-  // Return cached data if fresh
-  if (regionsCache && (Date.now() - regionsCache.fetchedAt) < REGIONS_CACHE_TTL) {
-    return regionsCache.data;
-  }
-
-  // We need to use the master/US endpoint to fetch regions
-  const regionsUrl = `https://${REGIONAL_HOSTS['us']}/tc/api/2.0/regions`;
-  console.log(`🌍 Fetching regions data from: ${regionsUrl}`);
-
-  const response = await fetch(regionsUrl, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    }
-  });
-
-  if (!response.ok) {
-    console.error(`❌ Failed to fetch regions: ${response.status}`);
-    return null;
-  }
-
-  const data = await response.json();
-  const regions = Array.isArray(data) ? data : (data?.data || data);
-  
-  console.log(`✅ Fetched ${regions.length} regions`);
-  regions.forEach(r => {
-    console.log(`   Region: ${r.location} | origin: ${r.origin} | topic-api: ${r['topic-api'] || 'N/A'}`);
-  });
-  
-  regionsCache = { data: regions, fetchedAt: Date.now() };
-  return regions;
-}
-
-/**
- * Get the BCF/Topic API base URL for a region by querying the regions endpoint
- * Falls back to constructed URL if regions fetch fails
- */
-async function getBcfBaseUrl(region, accessToken) {
-  try {
-    const regions = await getRegionsData(accessToken);
-    
-    if (regions) {
-      // Map our region codes to Trimble location names
-      const regionToLocation = {
-        'us': 'northAmerica',
-        'eu': 'europe',
-        'ap': 'asia',
-        'ap-au': 'australia',
-      };
-      
-      const location = regionToLocation[region] || 'europe';
-      
-      // Find matching server by location or origin
-      const host = REGIONAL_HOSTS[region] || REGIONAL_HOSTS['eu'];
-      const server = regions.find(s => 
-        s.location === location || 
-        s.origin === host ||
-        s.origin === `${host}`
-      );
-      
-      if (server && server['topic-api']) {
-        const topicApiUrl = server['topic-api'];
-        console.log(`🔗 BCF Topic API URL from regions: ${topicApiUrl}`);
-        return topicApiUrl;
-      }
-      
-      console.warn(`⚠️ No topic-api found for region ${region}, trying all servers...`);
-      
-      // Try to find any server with topic-api
-      for (const s of regions) {
-        if (s['topic-api']) {
-          console.log(`🔗 Using topic-api from ${s.location}: ${s['topic-api']}`);
-          return s['topic-api'];
-        }
-      }
-    }
-  } catch (error) {
-    console.error(`❌ Failed to get BCF URL from regions: ${error.message}`);
-  }
-  
-  // Fallback: construct URL (may not work, but better than nothing)
-  const host = REGIONAL_HOSTS[region] || REGIONAL_HOSTS['eu'];
-  return `https://${host}/tc/api/2.0`;
+function getBcfBaseUrl(region) {
+  const host = BCF_HOSTS[region] || BCF_HOSTS['eu'];
+  return `https://${host}`;
 }
 
 // Token store
@@ -565,75 +500,64 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
 /**
  * GET /api/projects/:projectId/bcf/topics
  * 
- * BCF Topics use a SEPARATE API whose URL is discovered from the regions endpoint.
- * The SDK gets the URL from the 'topic-api' field in the regions response.
+ * BCF Topics use a SEPARATE API on openXX.connect.trimble.com servers.
+ * From Swagger (Trimble-Connect/topic/v2):
+ *   - North America: https://open11.connect.trimble.com
+ *   - Europe:        https://open21.connect.trimble.com
+ *   - Asia-Pacific:  https://open31.connect.trimble.com
+ *   - Australia:     https://open32.connect.trimble.com
  * 
- * Strategy:
- * 1. Get the topic-api URL from regions endpoint  
- * 2. Try: {topic-api}/bcf/2.1/projects/{id}/topics
- * 3. Fallback: {topic-api}/projects/{id}/topics
- * 4. Fallback: {base}/topics?projectId={id} (Core API pattern)
+ * Endpoint: GET /bcf/3.0/projects/{project_id}/topics
+ * Fallback: GET /bcf/2.1/projects/{project_id}/topics
  */
 app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
     
-    // Strategy 1: Use dynamic topic-api URL from regions
-    const topicApiBase = await getBcfBaseUrl(req.region, req.accessToken);
-    console.log(`🔧 BCF: Using topic-api base: ${topicApiBase}`);
+    // Get the correct BCF host for this region (openXX, not appXX)
+    const bcfBase = getBcfBaseUrl(req.region);
+    console.log(`🔧 BCF: Region "${req.region}" → BCF base: ${bcfBase}`);
     
-    // Try BCF 2.1 standard path
-    const bcfUrl1 = `${topicApiBase}/bcf/2.1/projects/${projectId}/topics`;
-    console.log(`🔧 BCF: Trying ${bcfUrl1}`);
+    // Strategy 1: Try BCF 3.0 (latest, from Swagger docs)
+    const bcfUrl1 = `${bcfBase}/bcf/3.0/projects/${projectId}/topics`;
+    console.log(`🔧 BCF: Trying BCF 3.0: ${bcfUrl1}`);
     let result = await trimbleFetch(bcfUrl1, req.accessToken);
     
     if (result.ok) {
       const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      console.log(`✅ Retrieved ${topics.length} BCF topics via bcf/2.1 path`);
+      console.log(`✅ Retrieved ${topics.length} BCF topics via BCF 3.0`);
       return res.json(topics);
     }
-    console.log(`⚠️ BCF path 1 failed (${result.status})`);
+    console.log(`⚠️ BCF 3.0 failed (${result.status}): ${(result.error || '').substring(0, 100)}`);
     
-    // Try without /bcf/2.1/ prefix (some implementations)
-    const bcfUrl2 = `${topicApiBase}/projects/${projectId}/topics`;
-    console.log(`🔧 BCF: Trying ${bcfUrl2}`);
+    // Strategy 2: Try BCF 2.1 (older but still commonly used)
+    const bcfUrl2 = `${bcfBase}/bcf/2.1/projects/${projectId}/topics`;
+    console.log(`🔧 BCF: Trying BCF 2.1: ${bcfUrl2}`);
     result = await trimbleFetch(bcfUrl2, req.accessToken);
     
     if (result.ok) {
       const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      console.log(`✅ Retrieved ${topics.length} BCF topics via /projects path`);
+      console.log(`✅ Retrieved ${topics.length} BCF topics via BCF 2.1`);
       return res.json(topics);
     }
-    console.log(`⚠️ BCF path 2 failed (${result.status})`);
+    console.log(`⚠️ BCF 2.1 failed (${result.status}): ${(result.error || '').substring(0, 100)}`);
     
-    // Strategy 2: Try Core API pattern (topics as query param, like todos)
-    const baseUrl = getBaseUrl(req.region);
-    const bcfUrl3 = `${baseUrl}/topics?projectId=${projectId}`;
-    console.log(`🔧 BCF: Trying Core API pattern: ${bcfUrl3}`);
+    // Strategy 3: Try without version prefix (fallback)
+    const bcfUrl3 = `${bcfBase}/projects/${projectId}/topics`;
+    console.log(`🔧 BCF: Trying without version: ${bcfUrl3}`);
     result = await trimbleFetch(bcfUrl3, req.accessToken);
     
     if (result.ok) {
       const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      console.log(`✅ Retrieved ${topics.length} BCF topics via Core API pattern`);
+      console.log(`✅ Retrieved ${topics.length} BCF topics via direct path`);
       return res.json(topics);
     }
-    console.log(`⚠️ BCF path 3 failed (${result.status})`);
+    console.log(`⚠️ BCF direct path failed (${result.status}): ${(result.error || '').substring(0, 100)}`);
     
-    // Strategy 3: Try regional host with bcf prefix
-    const host = REGIONAL_HOSTS[req.region] || REGIONAL_HOSTS['eu'];
-    const bcfUrl4 = `https://${host}/tc/api/2.0/bcf/2.1/projects/${projectId}/topics`;
-    console.log(`🔧 BCF: Trying regional bcf: ${bcfUrl4}`);
-    result = await trimbleFetch(bcfUrl4, req.accessToken);
-    
-    if (result.ok) {
-      const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      console.log(`✅ Retrieved ${topics.length} BCF topics via regional bcf`);
-      return res.json(topics);
-    }
-    console.log(`⚠️ BCF path 4 failed (${result.status})`);
-    
-    // All strategies failed
-    console.error('❌ All BCF topic strategies failed');
+    // All strategies failed - log debug info
+    console.error(`❌ All BCF topic strategies failed for project ${projectId} in region ${req.region}`);
+    console.error(`   BCF base URL was: ${bcfBase}`);
+    console.error(`   Last error: ${result.error}`);
     return res.status(result.status || 500).json({ error: result.error || 'Failed to fetch BCF topics' });
     
   } catch (error) {
@@ -710,7 +634,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    version: '5.1.0',
+    version: '5.2.0',
     environment: ENVIRONMENT,
     activeSessions: tokenStore.size
   });
@@ -719,10 +643,10 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '5.1.0',
+    version: '5.2.0',
     environment: ENVIRONMENT,
     deployed: new Date().toISOString(),
-    note: 'Fixed file names + BCF topics dynamic URL discovery from regions API',
+    note: 'Fixed BCF topics: uses openXX.connect.trimble.com servers (from Swagger docs)',
     supportedRegions: Object.keys(REGIONAL_HOSTS),
     endpoints: {
       auth: {
@@ -735,7 +659,7 @@ app.get('/', (req, res) => {
         todos: '/api/projects/:projectId/todos → GET /tc/api/2.0/todos?projectId={id}',
         views: '/api/projects/:projectId/views → GET /tc/api/2.0/views?projectId={id}',
         files: '/api/projects/:projectId/files → GET /tc/api/2.0/search?query=*&projectId={id}&type=FILE',
-        topics: '/api/projects/:projectId/bcf/topics → Dynamic URL from regions topic-api'
+        topics: '/api/projects/:projectId/bcf/topics → GET https://openXX.connect.trimble.com/bcf/3.0/projects/{id}/topics'
       }
     }
   });
@@ -750,6 +674,6 @@ function generateRandomState() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-console.log('✅ [Vercel v5.1] Serverless function initialized');
+console.log('✅ [Vercel v5.2] Serverless function initialized');
 
 module.exports = app;
