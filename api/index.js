@@ -436,7 +436,7 @@ app.get('/', (req, res) => {
       api: {
         files: '/api/projects/:projectId/files',
         todos: '/api/projects/:projectId/todos',
-        topics: '/api/projects/:projectId/topics',
+        topics: '/api/projects/:projectId/bcf/topics',
         views: '/api/projects/:projectId/views'
       }
     }
