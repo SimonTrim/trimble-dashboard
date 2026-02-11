@@ -2,11 +2,11 @@
  * Vercel Serverless Function - Trimble Dashboard Backend
  * 
  * Version autonome pour Vercel (ne dépend pas de backend/server.js)
- * Last updated: 2026-02-10 18:30 UTC
- * Testing GitHub webhook integration
+ * Last updated: 2026-02-11 12:00 UTC
+ * Fixed: Region codes mapping (europe → eu, asia → ap, australia → ap-au)
  */
 
-console.log('🔵 [Vercel v2.1] Starting serverless function...');
+console.log('🔵 [Vercel v2.2] Starting serverless function...');
 console.log('🔵 [Vercel] Timestamp:', new Date().toISOString());
 
 const express = require('express');
@@ -36,20 +36,46 @@ const TRIMBLE_TOKEN_URL = IS_STAGING
   : 'https://id.trimble.com/oauth/token';
 
 // Base URLs pour les différentes APIs Trimble Connect (v2.0)
+// Source: https://app.connect.trimble.com/tc/api/2.0/regions (Regions API)
 const TRIMBLE_CORE_API = IS_STAGING ? {
   us: 'https://app.stage.connect.trimble.com/tc/api/2.0',
-  europe: 'https://app21.stage.connect.trimble.com/tc/api/2.0',
-  asia: 'https://app31.stage.connect.trimble.com/tc/api/2.0',
-  australia: 'https://app32.stage.connect.trimble.com/tc/api/2.0',
+  eu: 'https://app21.stage.connect.trimble.com/tc/api/2.0',  // Europe
+  ap: 'https://app31.stage.connect.trimble.com/tc/api/2.0',  // Asia
+  'ap-au': 'https://app32.stage.connect.trimble.com/tc/api/2.0',  // Australia
 } : {
   us: 'https://app.connect.trimble.com/tc/api/2.0',
-  europe: 'https://app21.connect.trimble.com/tc/api/2.0',
-  asia: 'https://app31.connect.trimble.com/tc/api/2.0',
-  australia: 'https://app32.connect.trimble.com/tc/api/2.0',
+  eu: 'https://app21.connect.trimble.com/tc/api/2.0',  // Europe
+  ap: 'https://app31.connect.trimble.com/tc/api/2.0',  // Asia
+  'ap-au': 'https://app32.connect.trimble.com/tc/api/2.0',  // Australia
 };
 
 // Stockage temporaire des tokens
 const tokenStore = new Map();
+
+/**
+ * Convertir la location du projet en code de région pour l'API
+ * @param {string} location - La location du projet (ex: "europe", "northAmerica", "asia", "australia")
+ * @returns {string} Le code de région (ex: "eu", "us", "ap", "ap-au")
+ */
+function getRegionCode(location) {
+  const locationToRegion = {
+    'northAmerica': 'us',
+    'northamerica': 'us',
+    'us': 'us',
+    'europe': 'eu',
+    'eu': 'eu',
+    'asia': 'ap',
+    'ap': 'ap',
+    'australia': 'ap-au',
+    'ap-au': 'ap-au',
+  };
+  
+  const normalized = (location || 'europe').toLowerCase().trim();
+  const regionCode = locationToRegion[normalized] || 'eu'; // Default to EU if unknown
+  
+  console.log(`🌍 Location "${location}" mapped to region code "${regionCode}"`);
+  return regionCode;
+}
 
 // Configuration CORS
 const allowedOrigins = [
@@ -208,9 +234,10 @@ async function requireAuth(req, res, next) {
     console.log('🔑 Using Bearer token authentication');
     req.accessToken = accessToken;
     
-    // Utiliser l'en-tête X-Project-Region envoyé par le frontend
-    req.region = req.headers['x-project-region'] || 'europe'; // Default to 'europe' if not provided
-    console.log(`ℹ️ Project Region set to: ${req.region}`);
+    // Utiliser l'en-tête X-Project-Region envoyé par le frontend et le convertir en code de région
+    const projectLocation = req.headers['x-project-region'] || 'europe';
+    req.region = getRegionCode(projectLocation);
+    console.log(`ℹ️ Project Location "${projectLocation}" → Region code "${req.region}"`);
     return next();
   }
 
@@ -423,9 +450,11 @@ app.get('/', (req, res) => {
   console.log('✅ Root endpoint called');
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '2.1.0',
+    version: '2.2.0',
     environment: ENVIRONMENT,
     deployed: new Date().toISOString(),
+    note: 'Fixed region codes mapping: europe→eu, asia→ap, australia→ap-au',
+    supportedRegions: Object.keys(TRIMBLE_CORE_API),
     endpoints: {
       auth: {
         login: '/auth/login',
