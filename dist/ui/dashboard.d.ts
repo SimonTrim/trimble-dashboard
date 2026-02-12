@@ -1,6 +1,6 @@
 /**
  * Dashboard principal — shadcn/ui design
- * Full-width, draggable tiles, customizable layout, thumbnails
+ * 4-column grid, individual draggable tiles, expandable BCF, thumbnails
  */
 import { DashboardConfig } from '../models/types';
 import './styles.css';
@@ -9,6 +9,7 @@ export declare class Dashboard {
     private config;
     private containerId;
     private tileConfig;
+    private dragRAF;
     private allTopics;
     private allFiles;
     private allNotes;
@@ -16,18 +17,19 @@ export declare class Dashboard {
     constructor(containerId?: string, config?: Partial<DashboardConfig>);
     private loadTileConfig;
     private saveTileConfig;
+    private resetTileConfig;
     render(): Promise<void>;
     private loadAllData;
     private attachHeaderEvents;
     private applyTileVisibility;
     private initDragDrop;
-    private getDragAfterElement;
     private saveTileOrder;
     private renderMetrics;
     private trend;
     private setMetric;
     private renderCharts;
     private renderBCFTable;
+    private attachBCFExpand;
     private renderFilesTable;
     private renderViewsSection;
     private loadThumbnails;
@@ -40,6 +42,7 @@ export declare class Dashboard {
     private fmtDate;
     private relDate;
     private esc;
+    private truncate;
     private getRecentFiles;
     private showLoader;
     private hideLoader;
@@ -47,6 +50,6 @@ export declare class Dashboard {
     destroy(): void;
     exportPDF(): void;
     private getTemplate;
-    private metricCardHtml;
+    private metricHtml;
 }
 //# sourceMappingURL=dashboard.d.ts.map
