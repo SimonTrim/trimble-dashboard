@@ -40,6 +40,10 @@ export declare class WorkspaceAPIAdapter {
     private accessToken;
     constructor(workspaceAPI: TrimbleWorkspaceAPI, projectId: string, projectLocation?: string, accessToken?: string, backendUrl?: string);
     /**
+     * Mettre à jour le token d'accès (appelé lors du refresh automatique)
+     */
+    updateAccessToken(newToken: string): void;
+    /**
      * Obtenir le token d'accès (avec gestion du consentement utilisateur)
      */
     private getAccessToken;

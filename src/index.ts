@@ -31,6 +31,7 @@ interface WorkspaceAPIInstance {
 let workspaceAPI: WorkspaceAPIInstance | null = null;
 let dashboard: Dashboard | null = null;
 let isStandaloneMode = false;
+let isInitialized = false;
 
 /**
  * Détecter si nous sommes en mode standalone (lien direct) ou intégré (iframe Trimble Connect)
@@ -170,7 +171,7 @@ function createSidebarMenu(): void {
   }
 
   const mainMenuObject = {
-    title: 'Project Dashboard',
+    title: 'Dashboard',
     icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png',
     command: 'show_dashboard',
     subMenus: [
@@ -190,9 +191,7 @@ function createSidebarMenu(): void {
   // Mettre à jour le menu Trimble Connect
   workspaceAPI.ui.setMenu(mainMenuObject);
   logger.info('✓ Sidebar menu created');
-  
-  // Activer le premier sous-menu par défaut
-  workspaceAPI.ui.setActiveMenuItem('show_overview');
+  // Ne PAS appeler setActiveMenuItem ici — laisser l'utilisateur naviguer librement
 }
 
 /**
@@ -210,12 +209,18 @@ function handleWorkspaceEvents(event: string, args: any): void {
       // Token reçu de Trimble Connect (après consentement utilisateur ou refresh)
       logger.info('Access token received from Trimble Connect');
       if (args.data && typeof args.data === 'string' && args.data !== 'pending' && args.data !== 'denied') {
-        // Initialiser le dashboard avec le token
-        getCurrentProjectInfo().then(projectInfo => {
-          if (projectInfo) {
-            initializeWithToken(args.data, projectInfo);
-          }
-        });
+        if (isInitialized) {
+          // Dashboard déjà initialisé — juste mettre à jour le token sans re-render
+          logger.info('Updating access token (dashboard already initialized)');
+          trimbleClient.updateAccessToken(args.data);
+        } else {
+          // Première initialisation — lancer le dashboard
+          getCurrentProjectInfo().then(projectInfo => {
+            if (projectInfo) {
+              initializeWithToken(args.data, projectInfo);
+            }
+          });
+        }
       }
       break;
       
@@ -497,6 +502,7 @@ async function initializeWithToken(accessToken: string, projectInfo: any): Promi
 
   await dashboard.render();
   
+  isInitialized = true;
   logger.info('✅ Extension ready with Trimble Connect authentication!');
 }
 

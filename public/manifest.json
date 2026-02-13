@@ -1,6 +1,6 @@
 {
   "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png",
-  "title": "Project Dashboard",
+  "title": "Dashboard",
   "url": "https://simontrim.github.io/trimble-dashboard/public/index.html",
   "description": "Tableau de bord des métriques projet - Notes, BCF, Fichiers, Vues",
   "enabled": true

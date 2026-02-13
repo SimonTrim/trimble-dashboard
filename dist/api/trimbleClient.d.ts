@@ -32,6 +32,11 @@ declare class TrimbleClient {
      */
     isReady(): boolean;
     /**
+     * Mettre à jour le token d'accès sans réinitialiser le dashboard
+     * Utilisé lors du refresh automatique du token par Trimble Connect
+     */
+    updateAccessToken(newToken: string): void;
+    /**
      * Réinitialiser la connexion
      */
     reconnect(): Promise<TrimbleAPI>;

@@ -68,6 +68,14 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
+   * Mettre à jour le token d'accès (appelé lors du refresh automatique)
+   */
+  updateAccessToken(newToken: string): void {
+    this.accessToken = newToken;
+    logger.info('🔑 Access token updated');
+  }
+
+  /**
    * Obtenir le token d'accès (avec gestion du consentement utilisateur)
    */
   private async getAccessToken(): Promise<string> {

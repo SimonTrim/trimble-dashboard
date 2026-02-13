@@ -641,7 +641,7 @@ export class Dashboard {
       <div class="dashboard">
         <div class="dashboard-header">
           <div class="header-content">
-            <h1>📊 Project Dashboard</h1>
+            <h1>📊 Dashboard du projet</h1>
             <p>Vue d'ensemble de votre projet Trimble Connect</p>
           </div>
           <div class="header-actions">

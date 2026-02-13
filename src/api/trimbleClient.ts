@@ -140,6 +140,19 @@ class TrimbleClient {
   }
 
   /**
+   * Mettre à jour le token d'accès sans réinitialiser le dashboard
+   * Utilisé lors du refresh automatique du token par Trimble Connect
+   */
+  updateAccessToken(newToken: string): void {
+    if (this.api && this.api.updateAccessToken) {
+      this.api.updateAccessToken(newToken);
+      logger.info('✅ Access token updated silently');
+    } else {
+      logger.warn('Cannot update token — API does not support updateAccessToken');
+    }
+  }
+
+  /**
    * Réinitialiser la connexion
    */
   async reconnect(): Promise<TrimbleAPI> {
