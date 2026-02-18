@@ -173,30 +173,35 @@ export class WorkspaceAPIAdapter {
           const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/files`);
           
           const files: ProjectFile[] = response.map((file: any) => {
-            // Support multiple name field formats
             const fileName = file.name || file.nm || file.label || 'Unknown';
-            
-            // Support User object format: {firstName, lastName} or {name}
-            const createdBy = file.createdBy 
-              ? (file.createdBy.name || 
-                 [file.createdBy.firstName, file.createdBy.lastName].filter(Boolean).join(' ') || 
-                 file.createdBy.email || 
-                 'Unknown')
-              : (file.modifiedBy 
-                ? (file.modifiedBy.name || 
-                   [file.modifiedBy.firstName, file.modifiedBy.lastName].filter(Boolean).join(' ') || 
-                   file.modifiedBy.email || 
-                   'Unknown')
-                : 'Unknown');
-            
+
+            // Extract author — handle string (email), object {name, firstName, lastName, email}, or missing
+            const extractAuthor = (field: any): string | null => {
+              if (!field) return null;
+              if (typeof field === 'string') return field;
+              return field.name
+                || [field.firstName, field.lastName].filter(Boolean).join(' ')
+                || field.email
+                || null;
+            };
+            const uploadedBy = extractAuthor(file.createdBy)
+              || extractAuthor(file.modifiedBy)
+              || extractAuthor(file.uploadedBy)
+              || file.createdByEmail
+              || file.modifiedByEmail
+              || 'Inconnu';
+
+            // modifiedOn = last version upload, createdOn = original file creation
+            const activityDate = file.modifiedOn || file.mt || file.createdOn || file.ct;
+
             return {
               id: file.id,
               name: fileName,
               extension: fileName.includes('.') ? fileName.split('.').pop() || '' : '',
               size: file.size || file.sz || 0,
-              uploadedBy: createdBy,
-              uploadedAt: new Date(file.createdOn || file.ct || new Date()),
-              lastModified: new Date(file.modifiedOn || file.mt || file.createdOn || new Date()),
+              uploadedBy,
+              uploadedAt: new Date(activityDate || new Date()),
+              lastModified: new Date(activityDate || new Date()),
               path: file.parentPath || file.path || '/',
               downloadUrl: file.downloadUrl || undefined,
             };

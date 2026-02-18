@@ -28,6 +28,8 @@ export declare class Dashboard {
     private trend;
     private setMetric;
     private renderCharts;
+    private renderFilesTrendChart;
+    private attachChartPeriodButtons;
     private renderBCFTable;
     private attachBCFExpand;
     private renderFilesTable;
@@ -43,7 +45,6 @@ export declare class Dashboard {
     private relDate;
     private esc;
     private truncate;
-    private getRecentFiles;
     private showLoader;
     private hideLoader;
     stopAutoRefresh(): void;

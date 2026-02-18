@@ -1,6 +1,6 @@
 /**
- * Gestion des graphiques avec Chart.js
- * shadcn-inspired color scheme + Trimble branding
+ * Charts Manager — shadcn/ui inspired charts with Chart.js
+ * Dark area chart, modern doughnuts, clean bar charts
  */
 import { BCFStatusData, BCFPriorityData, FileTrendDataPoint } from '../models/types';
 export declare class ChartsManager {
@@ -8,25 +8,13 @@ export declare class ChartsManager {
     private filesChart;
     private fileTypeChart;
     private bcfPriorityChart;
-    /**
-     * Créer le graphique de répartition des BCF par statut (Bar Chart)
-     */
     createBCFChart(canvasId: string, data: BCFStatusData): void;
-    /**
-     * Créer le graphique de priorité BCF (Doughnut)
-     */
     createBCFPriorityChart(canvasId: string, data: BCFPriorityData): void;
     /**
-     * Créer le graphique de tendance des fichiers (Line Chart - area)
+     * Dark-themed area chart (shadcn "Total Visitors" style)
      */
     createFilesTrendChart(canvasId: string, data: FileTrendDataPoint[]): void;
-    /**
-     * Créer le graphique de distribution des types de fichiers (Doughnut)
-     */
     createFileTypeChart(canvasId: string, byExtension: Record<string, number>): void;
-    /**
-     * Détruire tous les graphiques
-     */
     destroy(): void;
 }
 //# sourceMappingURL=charts.d.ts.map

@@ -1,70 +1,58 @@
 /**
- * Gestion des graphiques avec Chart.js
- * shadcn-inspired color scheme + Trimble branding
+ * Charts Manager — shadcn/ui inspired charts with Chart.js
+ * Dark area chart, modern doughnuts, clean bar charts
  */
 
 import { Chart, registerables } from 'chart.js';
 import { BCFStatusData, BCFPriorityData, FileTrendDataPoint } from '../models/types';
 import { logger } from '../utils/logger';
 
-// Enregistrer tous les composants Chart.js
 Chart.register(...registerables);
 
-// shadcn-inspired chart colors
-const CHART_COLORS = {
-  primary: '#005F9E',
-  primaryLight: '#005F9E20',
+const COLORS = {
+  primary: '#0063a3',
+  primaryLight: 'rgba(0, 99, 163, 0.15)',
   danger: '#ef4444',
   warning: '#f59e0b',
   blue: '#3b82f6',
-  success: '#22c55e',
-  dark: '#0f172a',
-  muted: '#64748b',
-  gridLine: 'rgba(0, 0, 0, 0.04)',
-  border: '#e2e8f0',
+  success: '#10b981',
+  accent: '#6366f1',
+  muted: '#71717a',
+  gridLight: 'rgba(0, 0, 0, 0.04)',
+  gridDark: 'rgba(255, 255, 255, 0.06)',
+  dark: '#09090b',
+  darkMuted: '#a1a1aa',
 };
 
-// File type colors (muted, professional palette)
 const FILE_TYPE_COLORS: Record<string, string> = {
-  ifc: '#005F9E',
-  pdf: '#ef4444',
-  dwg: '#f59e0b',
-  rvt: '#22c55e',
-  nwd: '#8b5cf6',
-  nwc: '#a855f7',
-  trb: '#06b6d4',
-  jpg: '#ec4899',
-  jpeg: '#ec4899',
-  png: '#f97316',
-  mp4: '#14b8a6',
-  xlsx: '#6366f1',
-  xls: '#6366f1',
-  docx: '#3b82f6',
-  doc: '#3b82f6',
-  zip: '#64748b',
-  rar: '#64748b',
+  ifc: '#0063a3', pdf: '#ef4444', dwg: '#f59e0b', rvt: '#10b981',
+  nwd: '#8b5cf6', nwc: '#a855f7', trb: '#06b6d4',
+  jpg: '#ec4899', jpeg: '#ec4899', png: '#f97316',
+  mp4: '#14b8a6', xlsx: '#6366f1', xls: '#6366f1',
+  docx: '#3b82f6', doc: '#3b82f6', zip: '#71717a', rar: '#71717a',
 };
 
-const DEFAULT_FILE_COLOR = '#94a3b8';
+const DEFAULT_FILE_COLOR = '#a1a1aa';
 
-// Shared chart options for consistent look
-const sharedOptions = {
+const tooltipStyle = {
+  backgroundColor: 'rgba(9, 9, 11, 0.95)',
+  padding: 12,
+  titleColor: '#fafafa',
+  bodyColor: '#d4d4d8',
+  cornerRadius: 8,
+  titleFont: { size: 13, weight: 'bold' as const },
+  bodyFont: { size: 12, weight: 'normal' as const },
+  displayColors: true,
+  boxPadding: 4,
+  borderColor: 'rgba(255,255,255,0.1)',
+  borderWidth: 1,
+};
+
+const baseOpts = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: {
-    tooltip: {
-      backgroundColor: CHART_COLORS.dark,
-      padding: 10,
-      titleColor: '#fff',
-      bodyColor: '#fff',
-      cornerRadius: 8,
-      titleFont: { size: 12, weight: 'bold' as const },
-      bodyFont: { size: 12 },
-      displayColors: true,
-      boxPadding: 4,
-    },
-  },
-  animation: { duration: 800, easing: 'easeOutQuart' as const },
+  plugins: { tooltip: tooltipStyle },
+  animation: { duration: 700, easing: 'easeOutQuart' as const },
 };
 
 export class ChartsManager {
@@ -73,15 +61,11 @@ export class ChartsManager {
   private fileTypeChart: Chart | null = null;
   private bcfPriorityChart: Chart | null = null;
 
-  /**
-   * Créer le graphique de répartition des BCF par statut (Bar Chart)
-   */
   createBCFChart(canvasId: string, data: BCFStatusData): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
       if (this.bcfChart) this.bcfChart.destroy();
-
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
@@ -92,53 +76,43 @@ export class ChartsManager {
           datasets: [{
             label: 'Topics',
             data: [data.open, data.inProgress, data.resolved, data.closed],
-            backgroundColor: [
-              CHART_COLORS.danger,
-              CHART_COLORS.warning,
-              CHART_COLORS.blue,
-              CHART_COLORS.success,
-            ],
-            borderRadius: 6,
+            backgroundColor: [COLORS.danger, COLORS.warning, COLORS.blue, COLORS.success],
+            borderRadius: 8,
             borderSkipped: false,
-            barPercentage: 0.6,
+            barPercentage: 0.55,
           }],
         },
         options: {
-          ...sharedOptions,
+          ...baseOpts,
           plugins: {
-            ...sharedOptions.plugins,
+            ...baseOpts.plugins,
             legend: { display: false },
           },
           scales: {
             y: {
               beginAtZero: true,
-              ticks: { stepSize: 1, color: CHART_COLORS.muted, font: { size: 11 } },
-              grid: { color: CHART_COLORS.gridLine },
+              ticks: { stepSize: 1, color: COLORS.muted, font: { size: 11 } },
+              grid: { color: COLORS.gridLight },
               border: { display: false },
             },
             x: {
-              ticks: { color: CHART_COLORS.muted, font: { size: 11 } },
+              ticks: { color: COLORS.muted, font: { size: 11, weight: 'bold' as const } },
               grid: { display: false },
               border: { display: false },
             },
           },
         },
       });
-      logger.debug('BCF status chart created');
     } catch (error) {
       logger.error('Error creating BCF chart', { error });
     }
   }
 
-  /**
-   * Créer le graphique de priorité BCF (Doughnut)
-   */
   createBCFPriorityChart(canvasId: string, data: BCFPriorityData): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
       if (this.bcfPriorityChart) this.bcfPriorityChart.destroy();
-
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
@@ -150,28 +124,28 @@ export class ChartsManager {
           labels: ['Haute', 'Moyenne', 'Basse'],
           datasets: [{
             data: [data.high, data.medium, data.low],
-            backgroundColor: [CHART_COLORS.danger, CHART_COLORS.warning, CHART_COLORS.success],
+            backgroundColor: [COLORS.danger, COLORS.warning, COLORS.success],
             borderWidth: 0,
-            spacing: 2,
+            spacing: 3,
           }],
         },
         options: {
-          ...sharedOptions,
-          cutout: '65%',
+          ...baseOpts,
+          cutout: '68%',
           plugins: {
-            ...sharedOptions.plugins,
+            ...baseOpts.plugins,
             legend: {
               position: 'bottom',
               labels: {
-                padding: 16,
+                padding: 20,
                 usePointStyle: true,
                 pointStyle: 'circle',
-                font: { size: 11, weight: 'normal' as const },
-                color: CHART_COLORS.muted,
+                font: { size: 12, weight: 'normal' as const },
+                color: COLORS.muted,
               },
             },
             tooltip: {
-              ...sharedOptions.plugins.tooltip,
+              ...tooltipStyle,
               callbacks: {
                 label: (ctx: any) => {
                   const value = ctx.parsed;
@@ -183,21 +157,19 @@ export class ChartsManager {
           },
         },
       });
-      logger.debug('BCF priority chart created');
     } catch (error) {
       logger.error('Error creating BCF priority chart', { error });
     }
   }
 
   /**
-   * Créer le graphique de tendance des fichiers (Line Chart - area)
+   * Dark-themed area chart (shadcn "Total Visitors" style)
    */
   createFilesTrendChart(canvasId: string, data: FileTrendDataPoint[]): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
       if (this.filesChart) this.filesChart.destroy();
-
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
@@ -206,6 +178,11 @@ export class ChartsManager {
         return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
       });
 
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 200);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+      gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.05)');
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
       this.filesChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -213,29 +190,34 @@ export class ChartsManager {
           datasets: [{
             label: 'Fichiers',
             data: data.map(d => d.count),
-            borderColor: CHART_COLORS.primary,
-            backgroundColor: CHART_COLORS.primaryLight,
-            borderWidth: 2.5,
+            borderColor: 'rgba(255, 255, 255, 0.8)',
+            backgroundColor: gradient,
+            borderWidth: 2,
             fill: true,
             tension: 0.4,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: CHART_COLORS.primary,
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#ffffff',
+            pointHoverBorderColor: '#ffffff',
+            pointHoverBorderWidth: 2,
           }],
         },
         options: {
-          ...sharedOptions,
+          ...baseOpts,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
           plugins: {
-            ...sharedOptions.plugins,
+            ...baseOpts.plugins,
             legend: { display: false },
             tooltip: {
-              ...sharedOptions.plugins.tooltip,
+              ...tooltipStyle,
+              backgroundColor: 'rgba(39, 39, 42, 0.95)',
               callbacks: {
                 label: (context) => {
                   const v = context.parsed.y ?? 0;
-                  return ` ${v} fichier${v > 1 ? 's' : ''}`;
+                  return ` ${v} fichier${v > 1 ? 's' : ''} uploadé${v > 1 ? 's' : ''}`;
                 },
               },
             },
@@ -243,37 +225,33 @@ export class ChartsManager {
           scales: {
             y: {
               beginAtZero: true,
-              ticks: { stepSize: 1, color: CHART_COLORS.muted, font: { size: 11 } },
-              grid: { color: CHART_COLORS.gridLine },
-              border: { display: false },
+              display: false,
             },
             x: {
-              ticks: { color: CHART_COLORS.muted, font: { size: 11 } },
+              ticks: {
+                color: COLORS.darkMuted,
+                font: { size: 11 },
+                maxRotation: 0,
+              },
               grid: { display: false },
               border: { display: false },
             },
           },
         },
       });
-      logger.debug('Files trend chart created');
     } catch (error) {
       logger.error('Error creating files trend chart', { error });
     }
   }
 
-  /**
-   * Créer le graphique de distribution des types de fichiers (Doughnut)
-   */
   createFileTypeChart(canvasId: string, byExtension: Record<string, number>): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
       if (this.fileTypeChart) this.fileTypeChart.destroy();
-
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Sort by count descending, keep top 8, group rest as "Autres"
       const entries = Object.entries(byExtension).sort((a, b) => b[1] - a[1]);
       const topEntries = entries.slice(0, 8);
       const otherCount = entries.slice(8).reduce((sum, [, count]) => sum + count, 0);
@@ -298,26 +276,26 @@ export class ChartsManager {
             data: counts,
             backgroundColor: colors,
             borderWidth: 0,
-            spacing: 2,
+            spacing: 3,
           }],
         },
         options: {
-          ...sharedOptions,
-          cutout: '60%',
+          ...baseOpts,
+          cutout: '62%',
           plugins: {
-            ...sharedOptions.plugins,
+            ...baseOpts.plugins,
             legend: {
               position: 'right',
               labels: {
-                padding: 12,
+                padding: 14,
                 usePointStyle: true,
                 pointStyle: 'circle',
-                font: { size: 11, weight: 'normal' as const },
-                color: CHART_COLORS.muted,
+                font: { size: 12, weight: 'normal' as const },
+                color: COLORS.muted,
               },
             },
             tooltip: {
-              ...sharedOptions.plugins.tooltip,
+              ...tooltipStyle,
               callbacks: {
                 label: (ctx: any) => {
                   const value = ctx.parsed;
@@ -329,15 +307,11 @@ export class ChartsManager {
           },
         },
       });
-      logger.debug('File type chart created');
     } catch (error) {
       logger.error('Error creating file type chart', { error });
     }
   }
 
-  /**
-   * Détruire tous les graphiques
-   */
   destroy(): void {
     [this.bcfChart, this.filesChart, this.fileTypeChart, this.bcfPriorityChart].forEach(chart => {
       if (chart) chart.destroy();
@@ -346,6 +320,5 @@ export class ChartsManager {
     this.filesChart = null;
     this.fileTypeChart = null;
     this.bcfPriorityChart = null;
-    logger.debug('All charts destroyed');
   }
 }

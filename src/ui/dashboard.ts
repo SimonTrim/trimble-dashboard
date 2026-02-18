@@ -26,14 +26,14 @@ interface TileDef { id: string; label: string; icon: string; size: 1 | 2 | 4; ca
 const TILE_DEFS: TileDef[] = [
   { id: 'notes-metric',      label: 'Notes Actives',      icon: '📝', size: 1, cat: 'Métriques' },
   { id: 'bcf-metric',        label: 'BCF En Cours',       icon: '🔧', size: 1, cat: 'Métriques' },
-  { id: 'files-metric',      label: 'Fichiers Récents',   icon: '📁', size: 1, cat: 'Métriques' },
+  { id: 'files-metric',      label: 'Fichiers Projet',    icon: '📁', size: 1, cat: 'Métriques' },
   { id: 'views-metric',      label: 'Vues Créées',        icon: '👁️', size: 1, cat: 'Métriques' },
   { id: 'bcf-status-chart',  label: 'BCF par Statut',     icon: '📊', size: 1, cat: 'Graphiques' },
   { id: 'bcf-priority-chart',label: 'BCF par Priorité',   icon: '🎯', size: 1, cat: 'Graphiques' },
   { id: 'files-trend-chart', label: 'Tendance Fichiers',  icon: '📈', size: 1, cat: 'Graphiques' },
   { id: 'filetype-chart',    label: 'Types de Fichiers',  icon: '🗂️', size: 1, cat: 'Graphiques' },
   { id: 'bcf-table',         label: 'Topics BCF',         icon: '📋', size: 2, cat: 'Tableaux' },
-  { id: 'files-table',       label: 'Fichiers Récents',   icon: '📁', size: 2, cat: 'Tableaux' },
+  { id: 'files-table',       label: 'Derniers Fichiers',   icon: '📁', size: 2, cat: 'Tableaux' },
   { id: 'team',              label: 'Équipe Projet',      icon: '👥', size: 1, cat: 'Projet' },
   { id: 'timeline',          label: 'Activité Récente',   icon: '📅', size: 1, cat: 'Projet' },
   { id: 'views',             label: 'Vues 3D',            icon: '👁️', size: 2, cat: 'Projet' },
@@ -65,7 +65,7 @@ export class Dashboard {
     this.chartsManager = new ChartsManager();
     this.config = {
       refreshInterval: 0, recentFilesThreshold: 48,
-      maxRecentFilesDisplay: 10, enableAutoRefresh: false, ...config,
+      maxRecentFilesDisplay: 15, enableAutoRefresh: false, ...config,
     };
     this.tileConfig = this.loadTileConfig();
     logger.info('Dashboard initialized (v2 grid)');
@@ -291,12 +291,11 @@ export class Dashboard {
 
   private renderMetrics(): void {
     const active = this.allTopics.filter(t => t.status !== 'Closed');
-    const recent = this.getRecentFiles(this.config.recentFilesThreshold);
     const w = new Date(); w.setDate(w.getDate() - 7);
 
     this.setMetric('notes-count', this.allNotes.length, this.trend(this.allNotes, w), 'Notes non archivées');
     this.setMetric('bcf-count', active.length, this.trend(this.allTopics, w), 'Topics non fermés');
-    this.setMetric('files-count', recent.length, this.trend(this.allFiles, w, 'uploadedAt'), `Dernières ${this.config.recentFilesThreshold}h`);
+    this.setMetric('files-count', this.allFiles.length, this.trend(this.allFiles, w, 'uploadedAt'), 'Fichiers du projet');
     this.setMetric('views-count', this.allViews.length, this.trend(this.allViews, w), 'Vues sauvegardées');
   }
 
@@ -335,18 +334,41 @@ export class Dashboard {
     this.chartsManager.createBCFChart('bcf-chart', s);
     this.chartsManager.createBCFPriorityChart('bcf-priority-chart', p);
 
-    const today = new Date();
-    const ft: FileTrendDataPoint[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(today); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
-      const n = new Date(d); n.setDate(n.getDate() + 1);
-      ft.push({ date: d.toISOString().split('T')[0], count: this.allFiles.filter(f => { const fd = new Date(f.uploadedAt); return fd >= d && fd < n; }).length });
-    }
-    this.chartsManager.createFilesTrendChart('files-chart', ft);
+    this.renderFilesTrendChart(7);
+    this.attachChartPeriodButtons();
 
     const ext: Record<string, number> = {};
     this.allFiles.forEach(f => { const e = (f.extension || 'other').toLowerCase(); ext[e] = (ext[e] || 0) + 1; });
     this.chartsManager.createFileTypeChart('filetype-chart', ext);
+  }
+
+  private renderFilesTrendChart(days: number): void {
+    const today = new Date();
+    const ft: FileTrendDataPoint[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
+      const n = new Date(d); n.setDate(n.getDate() + 1);
+      ft.push({
+        date: d.toISOString().split('T')[0],
+        count: this.allFiles.filter(f => {
+          const fd = new Date(f.uploadedAt);
+          return fd >= d && fd < n;
+        }).length,
+      });
+    }
+    this.chartsManager.createFilesTrendChart('files-chart', ft);
+  }
+
+  private attachChartPeriodButtons(): void {
+    document.querySelectorAll('.chart-period-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        const period = parseInt(target.dataset.period || '7', 10);
+        document.querySelectorAll('.chart-period-btn').forEach(b => b.classList.remove('active'));
+        target.classList.add('active');
+        this.renderFilesTrendChart(period);
+      });
+    });
   }
 
   // =============================================
@@ -569,7 +591,6 @@ export class Dashboard {
   }
   private esc(s: string): string { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
   private truncate(s: string, len: number): string { return s.length > len ? s.substring(0, len) + '...' : s; }
-  private getRecentFiles(hrs: number): ProjectFile[] { const c = new Date(); c.setHours(c.getHours() - hrs); return this.allFiles.filter(f => new Date(f.uploadedAt) >= c); }
   private showLoader(): void { const el = document.getElementById('loader'); if (el) el.style.display = 'flex'; }
   private hideLoader(): void { const el = document.getElementById('loader'); if (el) el.style.display = 'none'; }
   stopAutoRefresh(): void { }
@@ -587,12 +608,12 @@ export class Dashboard {
     const tiles: Record<string, string> = {
       'notes-metric': this.metricHtml('notes-count', 'Notes Actives', 'notes', '📝'),
       'bcf-metric': this.metricHtml('bcf-count', 'BCF En Cours', 'bcf', '🔧'),
-      'files-metric': this.metricHtml('files-count', 'Fichiers Récents', 'files', '📁'),
+      'files-metric': this.metricHtml('files-count', 'Fichiers Projet', 'files', '📁'),
       'views-metric': this.metricHtml('views-count', 'Vues Créées', 'views', '👁️'),
 
       'bcf-status-chart': `<div class="card"><div class="card-header"><h3>BCF par statut</h3><span class="card-icon">📊</span></div><div class="card-content"><div class="chart-container"><canvas id="bcf-chart"></canvas></div></div></div>`,
       'bcf-priority-chart': `<div class="card"><div class="card-header"><h3>BCF par priorité</h3><span class="card-icon">🎯</span></div><div class="card-content"><div class="chart-container"><canvas id="bcf-priority-chart"></canvas></div></div></div>`,
-      'files-trend-chart': `<div class="card"><div class="card-header"><h3>Tendance Fichiers (7j)</h3><span class="card-icon">📈</span></div><div class="card-content"><div class="chart-container"><canvas id="files-chart"></canvas></div></div></div>`,
+      'files-trend-chart': `<div class="card card-dark"><div class="card-header"><h3>Tendance Fichiers</h3><div class="chart-period-tabs"><button class="chart-period-btn" data-period="30">30 jours</button><button class="chart-period-btn active" data-period="7">7 jours</button><button class="chart-period-btn" data-period="3">3 jours</button></div></div><div class="card-content"><div class="chart-container"><canvas id="files-chart"></canvas></div></div></div>`,
       'filetype-chart': `<div class="card"><div class="card-header"><h3>Types de fichiers</h3><span class="card-icon">🗂️</span></div><div class="card-content"><div class="chart-container"><canvas id="filetype-chart"></canvas></div></div></div>`,
 
       'bcf-table': `<div class="card"><div class="card-header"><h3>Topics BCF</h3><span class="card-icon">📋</span></div>
@@ -601,7 +622,7 @@ export class Dashboard {
           <tbody id="bcf-table-body"><tr><td colspan="5" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
         </table></div></div></div>`,
 
-      'files-table': `<div class="card"><div class="card-header"><h3>Fichiers Récents</h3><span class="card-icon">📁</span></div>
+      'files-table': `<div class="card"><div class="card-header"><h3>Derniers Fichiers</h3><span class="card-icon">📁</span></div>
         <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
           <thead><tr><th>Nom</th><th>Date</th><th>Auteur</th></tr></thead>
           <tbody id="files-table-body"><tr><td colspan="3" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
