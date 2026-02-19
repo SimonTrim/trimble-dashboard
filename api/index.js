@@ -417,7 +417,7 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
     const { projectId } = req.params;
     const baseUrl = getBaseUrl(req.region);
 
-    // Fetch project members to resolve user IDs to names
+    // Fetch project members to resolve user IDs to readable names
     let userMap = {};
     try {
       const membersUrl = `${baseUrl}/projects/${projectId}/users`;
@@ -433,10 +433,9 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
         console.log(`👥 Built user map with ${Object.keys(userMap).length} entries`);
       }
     } catch (e) {
-      console.log('⚠️ Could not fetch project members, author names may be IDs');
+      console.log('⚠️ Could not fetch project members');
     }
 
-    // Helper: resolve a user field (string ID, email, or object) to a readable name
     function resolveUser(field) {
       if (!field) return null;
       if (typeof field === 'object') {
@@ -446,98 +445,103 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
           || (field.id && userMap[field.id])
           || null;
       }
-      // String: could be email, UUID, or name
       if (userMap[field]) return userMap[field];
       return field;
     }
-    
-    // Strategy 1: Try Search API
-    const searchUrl = `${baseUrl}/search?query=*&projectId=${projectId}&type=FILE`;
-    console.log(`📁 Trying Search API for files...`);
-    
-    let result = await trimbleFetch(searchUrl, req.accessToken);
-    
-    if (result.ok) {
-      let rawResults = [];
-      if (Array.isArray(result.data)) {
-        rawResults = result.data;
-      } else if (result.data?.data) {
-        rawResults = result.data.data;
-      } else if (result.data?.items) {
-        rawResults = result.data.items;
-      }
-      
-      // Merge top-level metadata WITH details — Search API puts createdBy/dates at top level
-      const files = rawResults.map(item => {
-        const details = item.details || {};
-        const { details: _, type, ...topMeta } = item;
-        return {
-          ...details,
-          ...topMeta,
-          _searchType: type,
-          // Resolve user names
-          createdBy: resolveUser(topMeta.createdBy || details.createdBy) || resolveUser(topMeta.modifiedBy || details.modifiedBy) || 'Unknown',
-          modifiedBy: resolveUser(topMeta.modifiedBy || details.modifiedBy) || resolveUser(topMeta.createdBy || details.createdBy) || 'Unknown',
-          // Ensure dates from top-level override details
-          createdOn: topMeta.createdOn || details.createdOn || topMeta.ct || details.ct,
-          modifiedOn: topMeta.modifiedOn || details.modifiedOn || topMeta.mt || details.mt,
-        };
-      });
-      
-      console.log(`✅ Retrieved ${files.length} files via Search API`);
-      if (files.length > 0) {
-        console.log(`📋 Sample file keys: ${Object.keys(files[0]).join(', ')}`);
-        console.log(`📋 Sample createdBy: ${files[0].createdBy}`);
-        console.log(`📋 Sample modifiedOn: ${files[0].modifiedOn}`);
-      }
-      return res.json(files);
-    }
-    
-    console.log(`⚠️ Search API failed (${result.status}), trying Sync API...`);
-    
-    // Strategy 2: Fallback to Sync API
-    const syncUrl = `${baseUrl}/sync/${projectId}?excludeVersion=true`;
-    result = await trimbleFetch(syncUrl, req.accessToken);
-    
-    if (result.ok) {
-      let items = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      const files = items.filter(item => item.type === 'FILE').map(f => ({
-        ...f,
+
+    // Normalize file objects from any API source into a consistent shape
+    function normalizeFile(f) {
+      const name = f.name || f.nm || f.label || 'Unknown';
+      return {
+        id: f.id,
+        name,
+        size: f.size || f.sz || 0,
+        type: f.type || 'FILE',
+        parentId: f.parentId,
+        path: f.parentPath || f.path || '/',
+        // Dates — use both long and short field names
+        createdOn: f.createdOn || f.ct || null,
+        modifiedOn: f.modifiedOn || f.mt || f.createdOn || f.ct || null,
+        // Author — resolve via user map
         createdBy: resolveUser(f.createdBy) || resolveUser(f.modifiedBy) || 'Unknown',
         modifiedBy: resolveUser(f.modifiedBy) || resolveUser(f.createdBy) || 'Unknown',
-      }));
+      };
+    }
+
+    // ── Strategy 1: Sync API (real-time, includes recently uploaded files) ──
+    const syncUrl = `${baseUrl}/sync/${projectId}?excludeVersion=true`;
+    console.log(`📁 Strategy 1: Sync API...`);
+    let result = await trimbleFetch(syncUrl, req.accessToken);
+
+    if (result.ok) {
+      let items = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+      const files = items.filter(item => item.type === 'FILE').map(normalizeFile);
       console.log(`✅ Retrieved ${files.length} files via Sync API (from ${items.length} items)`);
+      if (files.length > 0) {
+        console.log(`📋 Sample: ${files[0].name} | by: ${files[0].createdBy} | mod: ${files[0].modifiedOn}`);
+      }
       return res.json(files);
     }
-    
-    console.log(`⚠️ Sync API also failed (${result.status})`);
-    
-    // Strategy 3: Try root folder listing
+    console.log(`⚠️ Sync API failed (${result.status})`);
+
+    // ── Strategy 2: Search API (slower index, but comprehensive metadata) ──
+    const searchUrl = `${baseUrl}/search?query=*&projectId=${projectId}&type=FILE`;
+    console.log(`📁 Strategy 2: Search API...`);
+    result = await trimbleFetch(searchUrl, req.accessToken);
+
+    if (result.ok) {
+      let rawResults = [];
+      if (Array.isArray(result.data)) rawResults = result.data;
+      else if (result.data?.data) rawResults = result.data.data;
+      else if (result.data?.items) rawResults = result.data.items;
+
+      const files = rawResults.map(item => {
+        const details = item.details || {};
+        const merged = { ...details, ...item };
+        delete merged.details;
+        return normalizeFile(merged);
+      });
+
+      console.log(`✅ Retrieved ${files.length} files via Search API`);
+      if (files.length > 0) {
+        console.log(`📋 Sample: ${files[0].name} | by: ${files[0].createdBy} | mod: ${files[0].modifiedOn}`);
+      }
+      return res.json(files);
+    }
+    console.log(`⚠️ Search API failed (${result.status})`);
+
+    // ── Strategy 3: Recursive folder listing ──
+    console.log(`📁 Strategy 3: Folder API...`);
     const projectUrl = `${baseUrl}/projects/${projectId}`;
     const projectResult = await trimbleFetch(projectUrl, req.accessToken);
-    
+
     if (projectResult.ok && projectResult.data) {
       const rootId = projectResult.data.rootId;
       if (rootId) {
-        const folderUrl = `${baseUrl}/folders/${rootId}/items`;
-        const folderResult = await trimbleFetch(folderUrl, req.accessToken);
-        
-        if (folderResult.ok) {
-          let items = Array.isArray(folderResult.data) ? folderResult.data : (folderResult.data?.data || []);
-          const files = items.filter(item => item.type === 'FILE').map(f => ({
-            ...f,
-            createdBy: resolveUser(f.createdBy) || resolveUser(f.modifiedBy) || 'Unknown',
-            modifiedBy: resolveUser(f.modifiedBy) || resolveUser(f.createdBy) || 'Unknown',
-          }));
-          console.log(`✅ Retrieved ${files.length} files via Folder API`);
-          return res.json(files);
+        // Recursive helper to list all files in all subfolders
+        async function listAllFiles(folderId, depth = 0) {
+          if (depth > 10) return []; // safety limit
+          const url = `${baseUrl}/folders/${folderId}/items`;
+          const r = await trimbleFetch(url, req.accessToken);
+          if (!r.ok) return [];
+          const items = Array.isArray(r.data) ? r.data : (r.data?.data || []);
+          let files = items.filter(i => i.type === 'FILE').map(normalizeFile);
+          const folders = items.filter(i => i.type === 'FOLDER');
+          for (const folder of folders) {
+            const subFiles = await listAllFiles(folder.id, depth + 1);
+            files = files.concat(subFiles);
+          }
+          return files;
         }
+        const files = await listAllFiles(rootId);
+        console.log(`✅ Retrieved ${files.length} files via recursive Folder API`);
+        if (files.length > 0) return res.json(files);
       }
     }
-    
+
     console.error('❌ All file fetching strategies failed');
     return res.status(result.status || 500).json({ error: result.error || 'Failed to fetch files' });
-    
+
   } catch (error) {
     console.error('❌ Files API error:', error.message);
     res.status(500).json({ error: error.message });
