@@ -416,6 +416,40 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
     const baseUrl = getBaseUrl(req.region);
+
+    // Fetch project members to resolve user IDs to names
+    let userMap = {};
+    try {
+      const membersUrl = `${baseUrl}/projects/${projectId}/users`;
+      const membersResult = await trimbleFetch(membersUrl, req.accessToken);
+      if (membersResult.ok) {
+        const members = Array.isArray(membersResult.data) ? membersResult.data : (membersResult.data?.data || []);
+        members.forEach(m => {
+          const name = [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || m.id;
+          if (m.id) userMap[m.id] = name;
+          if (m.uid) userMap[m.uid] = name;
+          if (m.email) userMap[m.email] = name;
+        });
+        console.log(`👥 Built user map with ${Object.keys(userMap).length} entries`);
+      }
+    } catch (e) {
+      console.log('⚠️ Could not fetch project members, author names may be IDs');
+    }
+
+    // Helper: resolve a user field (string ID, email, or object) to a readable name
+    function resolveUser(field) {
+      if (!field) return null;
+      if (typeof field === 'object') {
+        return field.name
+          || [field.firstName, field.lastName].filter(Boolean).join(' ')
+          || field.email
+          || (field.id && userMap[field.id])
+          || null;
+      }
+      // String: could be email, UUID, or name
+      if (userMap[field]) return userMap[field];
+      return field;
+    }
     
     // Strategy 1: Try Search API
     const searchUrl = `${baseUrl}/search?query=*&projectId=${projectId}&type=FILE`;
@@ -424,8 +458,6 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
     let result = await trimbleFetch(searchUrl, req.accessToken);
     
     if (result.ok) {
-      // Search API returns results in format: [{type: "FILE", details: {id, name, ...}}, ...]
-      // We need to unwrap the 'details' property to get the actual file objects
       let rawResults = [];
       if (Array.isArray(result.data)) {
         rawResults = result.data;
@@ -435,40 +467,52 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
         rawResults = result.data.items;
       }
       
-      // Unwrap search results: extract 'details' if present
+      // Merge top-level metadata WITH details — Search API puts createdBy/dates at top level
       const files = rawResults.map(item => {
-        if (item.details) {
-          // Search result format: {type, details: {id, name, size, ...}}
-          return { ...item.details, _searchType: item.type };
-        }
-        // Already a flat file object
-        return item;
+        const details = item.details || {};
+        const { details: _, type, ...topMeta } = item;
+        return {
+          ...details,
+          ...topMeta,
+          _searchType: type,
+          // Resolve user names
+          createdBy: resolveUser(topMeta.createdBy || details.createdBy) || resolveUser(topMeta.modifiedBy || details.modifiedBy) || 'Unknown',
+          modifiedBy: resolveUser(topMeta.modifiedBy || details.modifiedBy) || resolveUser(topMeta.createdBy || details.createdBy) || 'Unknown',
+          // Ensure dates from top-level override details
+          createdOn: topMeta.createdOn || details.createdOn || topMeta.ct || details.ct,
+          modifiedOn: topMeta.modifiedOn || details.modifiedOn || topMeta.mt || details.mt,
+        };
       });
       
       console.log(`✅ Retrieved ${files.length} files via Search API`);
       if (files.length > 0) {
-        console.log(`📋 Sample file: ${JSON.stringify(files[0]).substring(0, 300)}`);
+        console.log(`📋 Sample file keys: ${Object.keys(files[0]).join(', ')}`);
+        console.log(`📋 Sample createdBy: ${files[0].createdBy}`);
+        console.log(`📋 Sample modifiedOn: ${files[0].modifiedOn}`);
       }
       return res.json(files);
     }
     
     console.log(`⚠️ Search API failed (${result.status}), trying Sync API...`);
     
-    // Strategy 2: Fallback to Sync API (returns file system structure)
+    // Strategy 2: Fallback to Sync API
     const syncUrl = `${baseUrl}/sync/${projectId}?excludeVersion=true`;
     result = await trimbleFetch(syncUrl, req.accessToken);
     
     if (result.ok) {
-      // Sync returns all items (files + folders), filter to files only
       let items = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      const files = items.filter(item => item.type === 'FILE');
+      const files = items.filter(item => item.type === 'FILE').map(f => ({
+        ...f,
+        createdBy: resolveUser(f.createdBy) || resolveUser(f.modifiedBy) || 'Unknown',
+        modifiedBy: resolveUser(f.modifiedBy) || resolveUser(f.createdBy) || 'Unknown',
+      }));
       console.log(`✅ Retrieved ${files.length} files via Sync API (from ${items.length} items)`);
       return res.json(files);
     }
     
     console.log(`⚠️ Sync API also failed (${result.status})`);
     
-    // Strategy 3: Try getting root folder and listing its items
+    // Strategy 3: Try root folder listing
     const projectUrl = `${baseUrl}/projects/${projectId}`;
     const projectResult = await trimbleFetch(projectUrl, req.accessToken);
     
@@ -480,14 +524,17 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
         
         if (folderResult.ok) {
           let items = Array.isArray(folderResult.data) ? folderResult.data : (folderResult.data?.data || []);
-          const files = items.filter(item => item.type === 'FILE');
+          const files = items.filter(item => item.type === 'FILE').map(f => ({
+            ...f,
+            createdBy: resolveUser(f.createdBy) || resolveUser(f.modifiedBy) || 'Unknown',
+            modifiedBy: resolveUser(f.modifiedBy) || resolveUser(f.createdBy) || 'Unknown',
+          }));
           console.log(`✅ Retrieved ${files.length} files via Folder API`);
           return res.json(files);
         }
       }
     }
     
-    // All strategies failed
     console.error('❌ All file fetching strategies failed');
     return res.status(result.status || 500).json({ error: result.error || 'Failed to fetch files' });
     
@@ -574,27 +621,43 @@ app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (
   try {
     const { viewId } = req.params;
     const baseUrl = getBaseUrl(req.region);
-    const thumbnailUrl = `${baseUrl}/views/${viewId}/thumbnail`;
     
-    console.log(`🖼️ Fetching thumbnail: ${thumbnailUrl}`);
+    // Try multiple thumbnail endpoint formats
+    const urls = [
+      `${baseUrl}/views/${viewId}/thumbnail`,
+      `${baseUrl}/views/${viewId}/thumbnail2d`,
+    ];
     
-    const response = await fetch(thumbnailUrl, {
-      headers: {
-        'Authorization': `Bearer ${req.accessToken}`,
+    for (const thumbnailUrl of urls) {
+      console.log(`🖼️ Trying thumbnail: ${thumbnailUrl}`);
+      
+      try {
+        const response = await fetch(thumbnailUrl, {
+          headers: {
+            'Authorization': `Bearer ${req.accessToken}`,
+            'Accept': 'image/png, image/jpeg, image/*',
+          }
+        });
+
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || 'image/png';
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          
+          if (buffer.length > 0) {
+            console.log(`✅ Thumbnail found for view ${viewId} (${buffer.length} bytes)`);
+            res.set('Content-Type', contentType);
+            res.set('Cache-Control', 'public, max-age=3600');
+            return res.send(buffer);
+          }
+        }
+        console.log(`⚠️ Thumbnail ${thumbnailUrl}: ${response.status}`);
+      } catch (e) {
+        console.log(`⚠️ Thumbnail fetch error: ${e.message}`);
       }
-    });
-
-    if (!response.ok) {
-      console.log(`⚠️ Thumbnail not found for view ${viewId}: ${response.status}`);
-      return res.status(response.status).send('Thumbnail not found');
     }
-
-    const contentType = response.headers.get('content-type') || 'image/png';
-    const buffer = await response.buffer();
     
-    res.set('Content-Type', contentType);
-    res.set('Cache-Control', 'public, max-age=3600');
-    res.send(buffer);
+    return res.status(404).send('Thumbnail not found');
   } catch (error) {
     console.error('❌ Thumbnail error:', error.message);
     res.status(500).send('Failed to fetch thumbnail');

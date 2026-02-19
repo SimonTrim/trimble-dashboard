@@ -175,23 +175,13 @@ export class WorkspaceAPIAdapter {
           const files: ProjectFile[] = response.map((file: any) => {
             const fileName = file.name || file.nm || file.label || 'Unknown';
 
-            // Extract author — handle string (email), object {name, firstName, lastName, email}, or missing
-            const extractAuthor = (field: any): string | null => {
-              if (!field) return null;
-              if (typeof field === 'string') return field;
-              return field.name
-                || [field.firstName, field.lastName].filter(Boolean).join(' ')
-                || field.email
-                || null;
-            };
-            const uploadedBy = extractAuthor(file.createdBy)
-              || extractAuthor(file.modifiedBy)
-              || extractAuthor(file.uploadedBy)
-              || file.createdByEmail
-              || file.modifiedByEmail
-              || 'Inconnu';
+            // Backend now resolves user IDs to names, so createdBy should be a readable string
+            const uploadedBy = file.createdBy && file.createdBy !== 'Unknown'
+              ? String(file.createdBy)
+              : (file.modifiedBy && file.modifiedBy !== 'Unknown'
+                ? String(file.modifiedBy)
+                : 'Inconnu');
 
-            // modifiedOn = last version upload, createdOn = original file creation
             const activityDate = file.modifiedOn || file.mt || file.createdOn || file.ct;
 
             return {
@@ -263,12 +253,17 @@ export class WorkspaceAPIAdapter {
           
           // Transformer en notre format TrimbleNote
           const notes: TrimbleNote[] = response.map((todo: any) => {
-            const author = todo.createdBy 
-              ? (todo.createdBy.name || 
-                 [todo.createdBy.firstName, todo.createdBy.lastName].filter(Boolean).join(' ') || 
-                 todo.createdBy.email || 
-                 'Unknown')
-              : 'Unknown';
+            let author = 'Unknown';
+            if (todo.createdBy) {
+              if (typeof todo.createdBy === 'string') {
+                author = todo.createdBy;
+              } else {
+                author = todo.createdBy.name
+                  || [todo.createdBy.firstName, todo.createdBy.lastName].filter(Boolean).join(' ')
+                  || todo.createdBy.email
+                  || 'Unknown';
+              }
+            }
             
             return {
               id: todo.id,
@@ -354,20 +349,25 @@ export class WorkspaceAPIAdapter {
           
           // Transformer en notre format ProjectView
           const views: ProjectView[] = response.map((view: any) => {
-            const createdBy = view.createdBy 
-              ? (view.createdBy.name || 
-                 [view.createdBy.firstName, view.createdBy.lastName].filter(Boolean).join(' ') || 
-                 view.createdBy.email || 
-                 'Unknown')
-              : 'Unknown';
+            let createdBy = 'Unknown';
+            if (view.createdBy) {
+              if (typeof view.createdBy === 'string') {
+                createdBy = view.createdBy;
+              } else {
+                createdBy = view.createdBy.name
+                  || [view.createdBy.firstName, view.createdBy.lastName].filter(Boolean).join(' ')
+                  || view.createdBy.email
+                  || 'Unknown';
+              }
+            }
             
             return {
               id: view.id,
               name: view.name || 'Sans nom',
               description: view.description || undefined,
               createdBy,
-              createdAt: new Date(view.createdOn || new Date()),
-              thumbnail: view.thumbnail || undefined,
+              createdAt: new Date(view.createdOn || view.modifiedOn || new Date()),
+              thumbnail: view.thumbnail || view.thumbnailUrl || undefined,
               isDefault: view.isDefault || false,
             };
           });

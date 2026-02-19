@@ -490,24 +490,39 @@ export class Dashboard {
       c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👁️</div><div class="empty-state-text">Aucune vue</div></div>';
       return;
     }
-    c.innerHTML = views.map(v => `<div class="view-item">
-      <div class="view-thumbnail" data-view-id="${v.id}">🖼️</div>
-      <div class="view-name" title="${this.esc(v.name)}">${this.esc(v.name)}</div>
-      <div class="view-meta">${this.esc(v.createdBy)} · ${this.fmtDate(v.createdAt)}</div>
-    </div>`).join('');
+    c.innerHTML = views.map(v => {
+      // If the view already has a thumbnail URL from the API, use it directly
+      const thumbContent = v.thumbnail
+        ? `<img src="${this.esc(v.thumbnail)}" alt="${this.esc(v.name)}" />`
+        : '<span class="thumb-loading">🖼️</span>';
+      return `<div class="view-item">
+        <div class="view-thumbnail" data-view-id="${v.id}">${thumbContent}</div>
+        <div class="view-name" title="${this.esc(v.name)}">${this.esc(v.name)}</div>
+        <div class="view-meta">${this.esc(v.createdBy)} · ${this.fmtDate(v.createdAt)}</div>
+      </div>`;
+    }).join('');
   }
 
   private async loadThumbnails(): Promise<void> {
+    // Only fetch thumbnails for views that don't already have one
     const thumbEls = document.querySelectorAll('.view-thumbnail[data-view-id]');
-    const els = Array.from(thumbEls);
+    const els = Array.from(thumbEls).filter(el => el.querySelector('.thumb-loading'));
+    if (!els.length) return;
+
+    logger.info(`Loading thumbnails for ${els.length} views...`);
     for (let i = 0; i < els.length; i += 4) {
       await Promise.all(els.slice(i, i + 4).map(async (el) => {
         const viewId = (el as HTMLElement).dataset.viewId;
         if (!viewId) return;
         try {
           const url = await viewsService.getThumbnailUrl(viewId);
-          if (url) (el as HTMLElement).innerHTML = `<img src="${url}" alt="thumbnail" />`;
-        } catch { /* keep placeholder */ }
+          if (url) {
+            (el as HTMLElement).innerHTML = `<img src="${url}" alt="thumbnail" />`;
+            logger.debug(`Thumbnail loaded for view ${viewId}`);
+          }
+        } catch {
+          logger.debug(`Thumbnail not available for view ${viewId}`);
+        }
       }));
     }
   }
