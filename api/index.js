@@ -468,26 +468,11 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
       };
     }
 
-    // ── Strategy 1: Sync API (real-time, includes recently uploaded files) ──
-    const syncUrl = `${baseUrl}/sync/${projectId}?excludeVersion=true`;
-    console.log(`📁 Strategy 1: Sync API...`);
-    let result = await trimbleFetch(syncUrl, req.accessToken);
-
-    if (result.ok) {
-      let items = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      const files = items.filter(item => item.type === 'FILE').map(normalizeFile);
-      console.log(`✅ Retrieved ${files.length} files via Sync API (from ${items.length} items)`);
-      if (files.length > 0) {
-        console.log(`📋 Sample: ${files[0].name} | by: ${files[0].createdBy} | mod: ${files[0].modifiedOn}`);
-      }
-      return res.json(files);
-    }
-    console.log(`⚠️ Sync API failed (${result.status})`);
-
-    // ── Strategy 2: Search API (slower index, but comprehensive metadata) ──
+    // ── Strategy 1: Search API (reliable, returns indexed files with metadata) ──
     const searchUrl = `${baseUrl}/search?query=*&projectId=${projectId}&type=FILE`;
-    console.log(`📁 Strategy 2: Search API...`);
-    result = await trimbleFetch(searchUrl, req.accessToken);
+    console.log(`📁 Strategy 1: Search API...`);
+    let result = await trimbleFetch(searchUrl, req.accessToken);
+    let searchFiles = [];
 
     if (result.ok) {
       let rawResults = [];
@@ -495,52 +480,89 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
       else if (result.data?.data) rawResults = result.data.data;
       else if (result.data?.items) rawResults = result.data.items;
 
-      const files = rawResults.map(item => {
+      searchFiles = rawResults.map(item => {
         const details = item.details || {};
-        const merged = { ...details, ...item };
-        delete merged.details;
+        const merged = { ...details };
+        // Preserve top-level metadata (createdBy, modifiedBy, dates) from search wrapper
+        if (item.createdBy) merged.createdBy = item.createdBy;
+        if (item.modifiedBy) merged.modifiedBy = item.modifiedBy;
+        if (item.createdOn) merged.createdOn = item.createdOn;
+        if (item.modifiedOn) merged.modifiedOn = item.modifiedOn;
+        if (item.ct) merged.ct = item.ct;
+        if (item.mt) merged.mt = item.mt;
         return normalizeFile(merged);
       });
 
-      console.log(`✅ Retrieved ${files.length} files via Search API`);
-      if (files.length > 0) {
-        console.log(`📋 Sample: ${files[0].name} | by: ${files[0].createdBy} | mod: ${files[0].modifiedOn}`);
+      console.log(`✅ Search API: ${searchFiles.length} files`);
+      if (searchFiles.length > 0) {
+        console.log(`📋 Sample: ${searchFiles[0].name} | by: ${searchFiles[0].createdBy} | mod: ${searchFiles[0].modifiedOn}`);
       }
-      return res.json(files);
+    } else {
+      console.log(`⚠️ Search API failed (${result.status})`);
     }
-    console.log(`⚠️ Search API failed (${result.status})`);
 
-    // ── Strategy 3: Recursive folder listing ──
-    console.log(`📁 Strategy 3: Folder API...`);
-    const projectUrl = `${baseUrl}/projects/${projectId}`;
-    const projectResult = await trimbleFetch(projectUrl, req.accessToken);
+    // ── Strategy 2: Folder API to catch recently uploaded files not yet indexed ──
+    // Always try this to complement Search results with fresh uploads
+    let folderFiles = [];
+    try {
+      const projectUrl = `${baseUrl}/projects/${projectId}`;
+      const projectResult = await trimbleFetch(projectUrl, req.accessToken);
 
-    if (projectResult.ok && projectResult.data) {
-      const rootId = projectResult.data.rootId;
-      if (rootId) {
-        // Recursive helper to list all files in all subfolders
-        async function listAllFiles(folderId, depth = 0) {
-          if (depth > 10) return []; // safety limit
+      if (projectResult.ok && projectResult.data && projectResult.data.rootId) {
+        const rootId = projectResult.data.rootId;
+        console.log(`📁 Strategy 2: Folder API (root: ${rootId})...`);
+
+        async function listAllFiles(folderId, depth) {
+          if (depth > 8) return [];
           const url = `${baseUrl}/folders/${folderId}/items`;
           const r = await trimbleFetch(url, req.accessToken);
           if (!r.ok) return [];
           const items = Array.isArray(r.data) ? r.data : (r.data?.data || []);
           let files = items.filter(i => i.type === 'FILE').map(normalizeFile);
           const folders = items.filter(i => i.type === 'FOLDER');
-          for (const folder of folders) {
-            const subFiles = await listAllFiles(folder.id, depth + 1);
-            files = files.concat(subFiles);
+          // Traverse subfolders in parallel (batches of 5)
+          for (let i = 0; i < folders.length; i += 5) {
+            const batch = folders.slice(i, i + 5);
+            const results = await Promise.all(batch.map(f => listAllFiles(f.id, depth + 1)));
+            for (const r of results) files = files.concat(r);
           }
           return files;
         }
-        const files = await listAllFiles(rootId);
-        console.log(`✅ Retrieved ${files.length} files via recursive Folder API`);
-        if (files.length > 0) return res.json(files);
+        folderFiles = await listAllFiles(rootId, 0);
+        console.log(`✅ Folder API: ${folderFiles.length} files`);
       }
+    } catch (e) {
+      console.log(`⚠️ Folder API error: ${e.message}`);
     }
 
-    console.error('❌ All file fetching strategies failed');
-    return res.status(result.status || 500).json({ error: result.error || 'Failed to fetch files' });
+    // ── Merge results: use all unique files from both sources ──
+    const fileMap = new Map();
+    // Add search files first (they have good metadata)
+    for (const f of searchFiles) { if (f.id) fileMap.set(f.id, f); }
+    // Add/update with folder files (they include recent uploads)
+    for (const f of folderFiles) {
+      if (f.id && !fileMap.has(f.id)) {
+        fileMap.set(f.id, f);
+      } else if (f.id && fileMap.has(f.id)) {
+        // Merge: prefer folder data for dates (more recent), search data for author if better
+        const existing = fileMap.get(f.id);
+        if (f.modifiedOn && (!existing.modifiedOn || new Date(f.modifiedOn) > new Date(existing.modifiedOn))) {
+          existing.modifiedOn = f.modifiedOn;
+        }
+        if (f.createdBy && f.createdBy !== 'Unknown' && existing.createdBy === 'Unknown') {
+          existing.createdBy = f.createdBy;
+        }
+      }
+    }
+    const allFiles = Array.from(fileMap.values());
+    console.log(`📊 Total unique files: ${allFiles.length} (search: ${searchFiles.length}, folder: ${folderFiles.length})`);
+
+    if (allFiles.length > 0) {
+      return res.json(allFiles);
+    }
+
+    console.error('❌ No files found from any source');
+    return res.status(404).json({ error: 'No files found' });
 
   } catch (error) {
     console.error('❌ Files API error:', error.message);
