@@ -1,11 +1,12 @@
 /**
- * Dashboard principal — shadcn/ui design
- * 4-column grid, individual draggable tiles, expandable BCF, thumbnails
+ * Dashboard principal — Modus 2.0 design, dark/light theme
+ * 4-column grid, draggable tiles, 8 KPI metrics, 6 charts,
+ * tables with pagination, contributor bars, BCF age tracking
  */
 
 import {
-  DashboardConfig, ProjectFile, BCFTopic, TrimbleNote, ProjectView,
-  BCFStatusData, BCFPriorityData, FileTrendDataPoint,
+  ProjectFile, BCFTopic, TrimbleNote, ProjectView,
+  BCFStatusData, BCFPriorityData,
   ActivityItem, TeamMember, TrendData,
 } from '../models/types';
 import { notesService } from '../api/notesService';
@@ -24,25 +25,43 @@ import './styles.css';
 interface TileDef { id: string; label: string; icon: string; size: 1 | 2 | 4; cat: string; }
 
 const TILE_DEFS: TileDef[] = [
-  { id: 'notes-metric',      label: 'Notes Actives',      icon: '📝', size: 1, cat: 'Métriques' },
-  { id: 'bcf-metric',        label: 'BCF En Cours',       icon: '🔧', size: 1, cat: 'Métriques' },
-  { id: 'files-metric',      label: 'Fichiers Projet',    icon: '📁', size: 1, cat: 'Métriques' },
-  { id: 'views-metric',      label: 'Vues Créées',        icon: '👁️', size: 1, cat: 'Métriques' },
-  { id: 'bcf-status-chart',  label: 'BCF par Statut',     icon: '📊', size: 1, cat: 'Graphiques' },
-  { id: 'bcf-priority-chart',label: 'BCF par Priorité',   icon: '🎯', size: 1, cat: 'Graphiques' },
-  { id: 'files-trend-chart', label: 'Tendance Fichiers',  icon: '📈', size: 1, cat: 'Graphiques' },
-  { id: 'filetype-chart',    label: 'Types de Fichiers',  icon: '🗂️', size: 1, cat: 'Graphiques' },
-  { id: 'bcf-table',         label: 'Topics BCF',         icon: '📋', size: 2, cat: 'Tableaux' },
-  { id: 'files-table',       label: 'Derniers Fichiers',   icon: '📁', size: 2, cat: 'Tableaux' },
-  { id: 'team',              label: 'Équipe Projet',      icon: '👥', size: 1, cat: 'Projet' },
-  { id: 'timeline',          label: 'Activité Récente',   icon: '📅', size: 1, cat: 'Projet' },
-  { id: 'views',             label: 'Vues 3D',            icon: '👁️', size: 2, cat: 'Projet' },
+  // 8 metric KPIs (row 1 & 2)
+  { id: 'files-deposited-metric',   label: 'Fichiers déposés',  icon: 'folder',           size: 1, cat: 'Métriques' },
+  { id: 'bcf-topics-metric',        label: 'Topics BCF',        icon: 'warning',          size: 1, cat: 'Métriques' },
+  { id: 'bcf-active-metric',        label: 'BCF actifs',        icon: 'error',            size: 1, cat: 'Métriques' },
+  { id: 'bcf-resolved-metric',      label: 'BCF résolus',       icon: 'check_circle',     size: 1, cat: 'Métriques' },
+  { id: 'bcf-inprogress-metric',    label: 'En cours',          icon: 'pending',          size: 1, cat: 'Métriques' },
+  { id: 'file-types-metric',        label: 'Types de fichiers',  icon: 'content_copy',    size: 1, cat: 'Métriques' },
+  { id: 'contributors-metric',      label: 'Contributeurs',     icon: 'people',           size: 1, cat: 'Métriques' },
+  { id: 'resolution-rate-metric',   label: 'Taux résolution',   icon: 'bar_graph',        size: 1, cat: 'Métriques' },
+
+  // Charts
+  { id: 'cumulative-chart',         label: 'Fichiers déposés — évolution cumulatif',  icon: 'line_graph', size: 2, cat: 'Graphiques' },
+  { id: 'deposit-freq-chart',       label: 'Fréquence de dépôt (26 dernières semaines)', icon: 'bar_graph', size: 2, cat: 'Graphiques' },
+  { id: 'bcf-status-donut',         label: 'BCF par statut',    icon: 'pie_chart',        size: 1, cat: 'Graphiques' },
+  { id: 'bcf-created-resolved',     label: 'BCF créés vs résolus dans le temps', icon: 'line_graph', size: 2, cat: 'Graphiques' },
+  { id: 'bcf-priority-chart',       label: 'BCF par priorité',  icon: 'pie_chart',        size: 1, cat: 'Graphiques' },
+  { id: 'bcf-assignee-chart',       label: 'BCF par personne assignée', icon: 'people',   size: 2, cat: 'Graphiques' },
+  { id: 'filetype-chart',           label: 'Fichiers par type', icon: 'pie_chart',        size: 2, cat: 'Graphiques' },
+  { id: 'top-contributors',         label: 'Top contributeurs (fichiers déposés)', icon: 'people', size: 2, cat: 'Graphiques' },
+
+  // Tables
+  { id: 'top-updated-files',        label: 'Top 20 — Fichiers les plus mis à jour', icon: 'file_upload', size: 4, cat: 'Tableaux' },
+  { id: 'oldest-unresolved-bcf',    label: 'Top 3 — BCF non résolus les plus anciens', icon: 'warning', size: 4, cat: 'Tableaux' },
+  { id: 'recent-files-table',       label: 'Fichiers récents',  icon: 'folder_open',      size: 4, cat: 'Tableaux' },
+  { id: 'recent-bcf-table',         label: 'BCF récents',       icon: 'assignment',       size: 4, cat: 'Tableaux' },
+
+  // Project
+  { id: 'team',                     label: 'Équipe Projet',     icon: 'people',           size: 1, cat: 'Projet' },
+  { id: 'timeline',                 label: 'Activité Récente',  icon: 'schedule',         size: 1, cat: 'Projet' },
+  { id: 'views',                    label: 'Vues 3D',           icon: 'visibility',       size: 2, cat: 'Projet' },
 ];
 
 const DEFAULT_ORDER = TILE_DEFS.map(t => t.id);
 
 interface TileConfig { order: string[]; hidden: string[]; }
-const STORAGE_KEY = 'trimble-dashboard-tiles-v2';
+const STORAGE_KEY = 'trimble-dashboard-tiles-v3';
+const THEME_KEY = 'trimble-dashboard-theme';
 
 // =============================================
 // DASHBOARD CLASS
@@ -50,25 +69,55 @@ const STORAGE_KEY = 'trimble-dashboard-tiles-v2';
 
 export class Dashboard {
   private chartsManager: ChartsManager;
-  private config: DashboardConfig;
   private containerId: string;
   private tileConfig: TileConfig;
   private dragRAF: number | null = null;
+  private projectName: string = '';
 
   private allTopics: BCFTopic[] = [];
   private allFiles: ProjectFile[] = [];
   private allNotes: TrimbleNote[] = [];
   private allViews: ProjectView[] = [];
 
-  constructor(containerId: string = 'app', config?: Partial<DashboardConfig>) {
+  private recentFilesPage: number = 1;
+  private recentBcfPage: number = 1;
+  private readonly PAGE_SIZE = 10;
+
+  constructor(containerId: string = 'app', _config?: Record<string, any>) {
     this.containerId = containerId;
     this.chartsManager = new ChartsManager();
-    this.config = {
-      refreshInterval: 0, recentFilesThreshold: 48,
-      maxRecentFilesDisplay: 15, enableAutoRefresh: false, ...config,
-    };
     this.tileConfig = this.loadTileConfig();
-    logger.info('Dashboard initialized (v2 grid)');
+    this.loadTheme();
+    logger.info('Dashboard initialized (v3 grid)');
+  }
+
+  setProjectName(name: string): void {
+    this.projectName = name;
+  }
+
+  // =============================================
+  // THEME
+  // =============================================
+
+  private loadTheme(): void {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'dark' || saved === 'light') {
+      document.documentElement.setAttribute('data-theme', saved);
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }
+
+  private toggleTheme(): void {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem(THEME_KEY, next);
+    this.render();
+  }
+
+  private isDark(): boolean {
+    return document.documentElement.getAttribute('data-theme') === 'dark';
   }
 
   // =============================================
@@ -142,8 +191,12 @@ export class Dashboard {
 
       this.renderMetrics();
       this.renderCharts();
-      this.renderBCFTable();
-      this.renderFilesTable();
+      this.renderBCFAssigneeChart();
+      this.renderTopContributors();
+      this.renderTopUpdatedFiles();
+      this.renderOldestUnresolvedBCF();
+      this.renderRecentFilesTable();
+      this.renderRecentBCFTable();
       this.renderViewsSection();
       this.renderTeamSection();
       this.renderTimeline();
@@ -161,8 +214,8 @@ export class Dashboard {
 
   private attachHeaderEvents(): void {
     document.getElementById('btn-export')?.addEventListener('click', () => window.print());
+    document.getElementById('btn-theme')?.addEventListener('click', () => this.toggleTheme());
 
-    // Settings panel toggle
     const settingsBtn = document.getElementById('btn-settings');
     const settingsPanel = document.getElementById('settings-panel');
     if (settingsBtn && settingsPanel) {
@@ -176,10 +229,8 @@ export class Dashboard {
       });
     }
 
-    // Reset button
     document.getElementById('btn-reset-layout')?.addEventListener('click', () => this.resetTileConfig());
 
-    // Settings checkboxes
     document.querySelectorAll('.settings-item input[type="checkbox"]').forEach(cb => {
       cb.addEventListener('change', (e) => {
         const input = e.target as HTMLInputElement;
@@ -208,7 +259,7 @@ export class Dashboard {
   }
 
   // =============================================
-  // DRAG & DROP (grid-aware)
+  // DRAG & DROP
   // =============================================
 
   private initDragDrop(): void {
@@ -216,7 +267,6 @@ export class Dashboard {
     if (!container) return;
     let draggedTile: HTMLElement | null = null;
 
-    // Enable drag only from handle
     Array.from(container.querySelectorAll('.tile-drag-handle')).forEach(handle => {
       handle.addEventListener('mousedown', () => {
         const tile = (handle as HTMLElement).closest('.tile') as HTMLElement;
@@ -241,29 +291,22 @@ export class Dashboard {
         draggedTile.setAttribute('draggable', 'false');
         draggedTile = null;
       }
-      container.querySelectorAll('.tile').forEach(t => {
-        t.classList.remove('drag-target');
-      });
+      container.querySelectorAll('.tile').forEach(t => t.classList.remove('drag-target'));
       this.saveTileOrder();
     });
 
     container.addEventListener('dragover', (e: DragEvent) => {
       e.preventDefault();
       if (!draggedTile) return;
-
       if (this.dragRAF) cancelAnimationFrame(this.dragRAF);
       this.dragRAF = requestAnimationFrame(() => {
         const target = (e.target as HTMLElement).closest('.tile:not(.dragging)') as HTMLElement;
         if (!target || target === draggedTile) return;
-
-        // Remove previous highlights
         container.querySelectorAll('.tile').forEach(t => t.classList.remove('drag-target'));
         target.classList.add('drag-target');
-
         const allTiles = Array.from(container.querySelectorAll('.tile'));
         const draggedIdx = allTiles.indexOf(draggedTile!);
         const targetIdx = allTiles.indexOf(target);
-
         if (draggedIdx < targetIdx) {
           container.insertBefore(draggedTile!, target.nextSibling);
         } else {
@@ -286,17 +329,29 @@ export class Dashboard {
   }
 
   // =============================================
-  // METRICS
+  // METRICS (8 KPIs)
   // =============================================
 
   private renderMetrics(): void {
-    const active = this.allTopics.filter(t => t.status !== 'Closed');
+    const active = this.allTopics.filter(t => t.status !== 'Closed' && t.status !== 'Resolved');
+    const resolved = this.allTopics.filter(t => t.status === 'Resolved' || t.status === 'Closed');
+    const inProgress = this.allTopics.filter(t => t.status === 'In Progress');
+    const uniqueTypes = new Set(this.allFiles.map(f => (f.extension || 'other').toLowerCase()));
+    const uniqueContributors = new Set<string>();
+    this.allFiles.forEach(f => { if (f.uploadedBy && f.uploadedBy !== '—') uniqueContributors.add(f.uploadedBy); });
+    this.allTopics.forEach(t => { if (t.createdBy && t.createdBy !== '—') uniqueContributors.add(t.createdBy); });
+    const resolutionRate = this.allTopics.length > 0 ? Math.round((resolved.length / this.allTopics.length) * 100) : 0;
+
     const w = new Date(); w.setDate(w.getDate() - 7);
 
-    this.setMetric('notes-count', this.allNotes.length, this.trend(this.allNotes, w), 'Notes non archivées');
-    this.setMetric('bcf-count', active.length, this.trend(this.allTopics, w), 'Topics non fermés');
-    this.setMetric('files-count', this.allFiles.length, this.trend(this.allFiles, w, 'uploadedAt'), 'Fichiers du projet');
-    this.setMetric('views-count', this.allViews.length, this.trend(this.allViews, w), 'Vues sauvegardées');
+    this.setMetric('files-deposited-val', this.allFiles.length, this.trend(this.allFiles, w, 'uploadedAt'), 'Fichiers du projet');
+    this.setMetric('bcf-topics-val', this.allTopics.length, this.trend(this.allTopics, w), 'Topics créés');
+    this.setMetric('bcf-active-val', active.length, null, 'Topics non fermés');
+    this.setMetric('bcf-resolved-val', resolved.length, null, 'Topics fermés/résolus');
+    this.setMetric('bcf-inprogress-val', inProgress.length, null, 'Topics en progression');
+    this.setMetric('file-types-val', uniqueTypes.size, null, 'Extensions différentes');
+    this.setMetric('contributors-val', uniqueContributors.size, null, 'Personnes actives');
+    this.setMetric('resolution-rate-val', resolutionRate, null, 'Taux de clôture', '%');
   }
 
   private trend(items: any[], since: Date, field: string = 'createdAt'): TrendData {
@@ -304,15 +359,20 @@ export class Dashboard {
     return { current: items.length, previous: items.length - n, direction: n > 0 ? 'up' : 'neutral', changeCount: n };
   }
 
-  private setMetric(id: string, value: number, t: TrendData, desc: string): void {
+  private setMetric(id: string, value: number, t: TrendData | null, desc: string, suffix: string = ''): void {
     const v = document.getElementById(id);
-    if (v) v.textContent = value.toString();
+    if (v) v.textContent = value.toString() + suffix;
     const tr = document.getElementById(`${id}-trend`);
     if (tr) {
-      tr.className = `metric-trend trend-${t.direction}`;
-      tr.innerHTML = t.changeCount > 0
-        ? `<span>↑</span> +${t.changeCount} cette semaine`
-        : '<span>─</span> Stable';
+      if (t) {
+        tr.className = `metric-trend trend-${t.direction}`;
+        tr.innerHTML = t.changeCount > 0
+          ? `<span>↑</span> +${t.changeCount} cette semaine`
+          : '<span>─</span> Stable';
+      } else {
+        tr.className = 'metric-trend trend-neutral';
+        tr.innerHTML = '<span>─</span> Stable';
+      }
     }
     const d = document.getElementById(`${id}-desc`);
     if (d) d.textContent = desc;
@@ -331,149 +391,335 @@ export class Dashboard {
       const pr = (t.priority || 'Medium').toLowerCase();
       if (pr === 'high') p.high++; else if (pr === 'low') p.low++; else p.medium++;
     });
-    this.chartsManager.createBCFChart('bcf-chart', s);
-    this.chartsManager.createBCFPriorityChart('bcf-priority-chart', p);
 
-    this.renderFilesTrendChart(7);
-    this.attachChartPeriodButtons();
+    this.chartsManager.createBCFStatusDonutChart('bcf-status-donut-canvas', s);
+    this.chartsManager.createBCFPriorityChart('bcf-priority-canvas', p);
+
+    this.renderCumulativeChart();
+    this.renderDepositFrequencyChart();
+    this.renderBCFCreatedResolvedChart(7);
+    this.attachBcfCreatedResolvedPeriod();
 
     const ext: Record<string, number> = {};
     this.allFiles.forEach(f => { const e = (f.extension || 'other').toLowerCase(); ext[e] = (ext[e] || 0) + 1; });
-    this.chartsManager.createFileTypeChart('filetype-chart', ext);
+    this.chartsManager.createFileTypeChart('filetype-canvas', ext);
   }
 
-  private renderFilesTrendChart(days: number): void {
-    const today = new Date();
-    const ft: FileTrendDataPoint[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(today); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
-      const n = new Date(d); n.setDate(n.getDate() + 1);
-      ft.push({
-        date: d.toISOString().split('T')[0],
-        count: this.allFiles.filter(f => {
-          const fd = new Date(f.uploadedAt);
-          return fd >= d && fd < n;
-        }).length,
-      });
+  private renderCumulativeChart(): void {
+    const byMonth: Record<string, number> = {};
+    this.allFiles.forEach(f => {
+      const d = new Date(f.uploadedAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      byMonth[key] = (byMonth[key] || 0) + 1;
+    });
+    const sorted = Object.keys(byMonth).sort();
+    let cumulative = 0;
+    const data = sorted.map(key => {
+      cumulative += byMonth[key];
+      return { label: key, cumulative };
+    });
+    this.chartsManager.createCumulativeChart('cumulative-canvas', data);
+  }
+
+  private renderDepositFrequencyChart(): void {
+    const now = new Date();
+    const weeks: { label: string; count: number }[] = [];
+    for (let i = 25; i >= 0; i--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - (i * 7) - weekStart.getDay() + 1);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      const count = this.allFiles.filter(f => {
+        const d = new Date(f.uploadedAt);
+        return d >= weekStart && d < weekEnd;
+      }).length;
+      const label = `${weekStart.getFullYear()}-w${String(Math.ceil((weekStart.getDate()) / 7)).padStart(2, '0')}`;
+      weeks.push({ label, count });
     }
-    this.chartsManager.createFilesTrendChart('files-chart', ft);
+    this.chartsManager.createDepositFrequencyChart('deposit-freq-canvas', weeks);
   }
 
-  private attachChartPeriodButtons(): void {
-    document.querySelectorAll('.chart-period-btn').forEach(btn => {
+  private renderBCFCreatedResolvedChart(days: number): void {
+    const now = new Date();
+    const data: { label: string; created: number; resolved: number }[] = [];
+    const step = days <= 14 ? 1 : 7;
+    const periods = Math.min(days, 30);
+
+    for (let i = periods - 1; i >= 0; i -= step) {
+      const start = new Date(now);
+      start.setDate(start.getDate() - i);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + step);
+
+      const created = this.allTopics.filter(t => {
+        const d = new Date(t.createdAt);
+        return d >= start && d < end;
+      }).length;
+      const resolved = this.allTopics.filter(t => {
+        if (t.status !== 'Resolved' && t.status !== 'Closed') return false;
+        const d = new Date(t.modifiedAt);
+        return d >= start && d < end;
+      }).length;
+
+      data.push({ label: start.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), created, resolved });
+    }
+    this.chartsManager.createBCFCreatedResolvedChart('bcf-created-resolved-canvas', data);
+  }
+
+  private attachBcfCreatedResolvedPeriod(): void {
+    document.querySelectorAll('.bcf-cr-period-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
         const period = parseInt(target.dataset.period || '7', 10);
-        document.querySelectorAll('.chart-period-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.bcf-cr-period-btn').forEach(b => b.classList.remove('active'));
         target.classList.add('active');
-        this.renderFilesTrendChart(period);
+        this.renderBCFCreatedResolvedChart(period);
       });
     });
   }
 
   // =============================================
-  // BCF TABLE (expandable)
+  // BCF ASSIGNEE (horizontal bar)
   // =============================================
 
-  private renderBCFTable(): void {
-    const tbody = document.getElementById('bcf-table-body');
+  private renderBCFAssigneeChart(): void {
+    const container = document.getElementById('bcf-assignee-list');
+    if (!container) return;
+
+    const byAssignee: Record<string, number> = {};
+    this.allTopics.forEach(t => {
+      const name = t.assignedTo || 'Non assigné';
+      byAssignee[name] = (byAssignee[name] || 0) + 1;
+    });
+
+    const sorted = Object.entries(byAssignee).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (!sorted.length) { container.innerHTML = '<div class="empty-state"><div class="empty-state-text">Aucun BCF</div></div>'; return; }
+
+    const max = sorted[0][1];
+    const barColors = ['#8b5cf6', '#10b981', '#0ea5e9', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4', '#f97316', '#6366f1', '#14b8a6'];
+
+    container.innerHTML = sorted.map(([name, count], i) => {
+      const pct = max > 0 ? Math.round((count / max) * 100) : 0;
+      return `<div class="hbar-item">
+        <span class="hbar-label" title="${this.esc(name)}">${this.esc(name)}</span>
+        <div class="hbar-bar-wrapper"><div class="hbar-bar" style="width:${pct}%;background:${barColors[i % barColors.length]}"></div></div>
+        <span class="hbar-value">${count}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // =============================================
+  // TOP CONTRIBUTORS (horizontal bar)
+  // =============================================
+
+  private renderTopContributors(): void {
+    const container = document.getElementById('top-contributors-list');
+    if (!container) return;
+
+    const byUploader: Record<string, number> = {};
+    this.allFiles.forEach(f => {
+      if (f.uploadedBy && f.uploadedBy !== '—') {
+        byUploader[f.uploadedBy] = (byUploader[f.uploadedBy] || 0) + 1;
+      }
+    });
+
+    const sorted = Object.entries(byUploader).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    if (!sorted.length) { container.innerHTML = '<div class="empty-state"><div class="empty-state-text">Aucun contributeur</div></div>'; return; }
+
+    const max = sorted[0][1];
+
+    container.innerHTML = sorted.map(([name, count], i) => {
+      const pct = max > 0 ? Math.round((count / max) * 100) : 0;
+      return `<div class="hbar-item">
+        <span class="hbar-rank">${i + 1}</span>
+        <span class="hbar-label" title="${this.esc(name)}">${this.esc(name)}</span>
+        <div class="hbar-bar-wrapper"><div class="hbar-bar" style="width:${pct}%;background:#0ea5e9"></div></div>
+        <span class="hbar-value">${count}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // =============================================
+  // TOP UPDATED FILES
+  // =============================================
+
+  private renderTopUpdatedFiles(): void {
+    const tbody = document.getElementById('top-updated-files-body');
     if (!tbody) return;
-    const topics = [...this.allTopics]
-      .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
+
+    const fileVersions: Record<string, { file: ProjectFile; count: number }> = {};
+    this.allFiles.forEach(f => {
+      const baseName = f.name.replace(/\s*\(\d+\)\s*/, '');
+      if (!fileVersions[baseName]) {
+        fileVersions[baseName] = { file: f, count: 1 };
+      } else {
+        fileVersions[baseName].count++;
+        if (new Date(f.uploadedAt) > new Date(fileVersions[baseName].file.uploadedAt)) {
+          fileVersions[baseName].file = f;
+        }
+      }
+    });
+
+    const sorted = Object.entries(fileVersions)
+      .sort((a, b) => b[1].count - a[1].count)
       .slice(0, 20);
 
-    if (!topics.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-text">Aucun topic BCF</div></td></tr>';
+    if (!sorted.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><div class="empty-state-text">Aucun fichier</div></td></tr>';
       return;
     }
 
-    tbody.innerHTML = topics.map(t => {
-      const desc = t.description ? this.esc(t.description) : '<span class="no-desc">Aucune description</span>';
-      const dueDate = t.dueDate ? this.fmtDate(t.dueDate) : '—';
-      return `
-        <tr class="bcf-row" data-bcf-id="${t.id}">
-          <td><span class="bcf-expand-icon">▶</span>${this.truncate(this.esc(t.title), 60)}</td>
-          <td><span class="badge badge-${this.statusCls(t.status)}">${t.status}</span></td>
-          <td><span class="badge badge-${(t.priority || 'medium').toLowerCase()}">${t.priority || 'Medium'}</span></td>
-          <td style="color:var(--muted-foreground)">${this.esc(t.assignedTo || '—')}</td>
-          <td style="color:var(--muted-foreground);white-space:nowrap">${this.fmtDate(t.modifiedAt)}</td>
-        </tr>
-        <tr class="bcf-detail-row" id="bcf-detail-${t.id}">
-          <td colspan="5">
-            <div class="bcf-detail">
-              <div class="bcf-detail-grid">
-                <div class="bcf-detail-section">
-                  <h4>Description</h4>
-                  <p>${desc}</p>
-                </div>
-                <div class="bcf-detail-section">
-                  <h4>Informations</h4>
-                  <div class="bcf-detail-fields">
-                    <div class="bcf-field"><span class="bcf-field-label">Créé par</span><span class="bcf-field-value">${this.esc(t.createdBy)}</span></div>
-                    <div class="bcf-field"><span class="bcf-field-label">Date création</span><span class="bcf-field-value">${this.fmtDate(t.createdAt)}</span></div>
-                    <div class="bcf-field"><span class="bcf-field-label">Dernière modif.</span><span class="bcf-field-value">${this.fmtDate(t.modifiedAt)}</span></div>
-                    <div class="bcf-field"><span class="bcf-field-label">Échéance</span><span class="bcf-field-value">${dueDate}</span></div>
-                    <div class="bcf-field"><span class="bcf-field-label">Assigné à</span><span class="bcf-field-value">${this.esc(t.assignedTo || '—')}</span></div>
-                    <div class="bcf-field"><span class="bcf-field-label">Statut</span><span class="bcf-field-value"><span class="badge badge-${this.statusCls(t.status)}">${t.status}</span></span></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </td>
-        </tr>`;
-    }).join('');
+    const maxVer = sorted[0][1].count;
+    const barColors = ['#ef4444', '#f59e0b', '#10b981', '#0ea5e9', '#8b5cf6', '#ec4899', '#f97316', '#06b6d4'];
 
-    // Attach expand click handlers
-    this.attachBCFExpand();
+    tbody.innerHTML = sorted.map(([name, { file, count }], i) => {
+      const ext = (file.extension || '').toLowerCase();
+      const pct = maxVer > 0 ? Math.round((count / maxVer) * 100) : 0;
+      const color = barColors[i % barColors.length];
+      return `<tr>
+        <td style="width:2rem;text-align:center;font-weight:700;color:var(--muted-foreground)">${i + 1}</td>
+        <td><span class="badge-ext ${ext || 'default'}">${ext || '?'}</span> <span class="file-name" title="${this.esc(name)}">${this.esc(this.truncate(name, 80))}</span></td>
+        <td style="width:8rem"><div class="version-bar"><div class="version-bar-fill" style="width:${pct}%;background:${color}"></div><span class="version-bar-label">${count}v</span></div></td>
+      </tr>`;
+    }).join('');
   }
 
-  private attachBCFExpand(): void {
-    document.querySelectorAll('.bcf-row[data-bcf-id]').forEach(row => {
-      row.addEventListener('click', () => {
-        const id = (row as HTMLElement).dataset.bcfId;
-        if (!id) return;
-        const detailRow = document.getElementById(`bcf-detail-${id}`);
-        if (!detailRow) return;
-        const isExpanded = row.classList.contains('expanded');
+  // =============================================
+  // OLDEST UNRESOLVED BCF
+  // =============================================
 
-        // Close all other expanded rows
-        document.querySelectorAll('.bcf-row.expanded').forEach(r => {
-          r.classList.remove('expanded');
-          const otherId = (r as HTMLElement).dataset.bcfId;
-          if (otherId) {
-            const otherDetail = document.getElementById(`bcf-detail-${otherId}`);
-            if (otherDetail) otherDetail.classList.remove('expanded');
-          }
-        });
+  private renderOldestUnresolvedBCF(): void {
+    const tbody = document.getElementById('oldest-bcf-body');
+    if (!tbody) return;
 
-        // Toggle current
-        if (!isExpanded) {
-          row.classList.add('expanded');
-          detailRow.classList.add('expanded');
-        }
+    const unresolved = this.allTopics
+      .filter(t => t.status !== 'Closed' && t.status !== 'Resolved')
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .slice(0, 5);
+
+    if (!unresolved.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">Aucun BCF non résolu</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = unresolved.map(t => {
+      const age = Math.floor((Date.now() - new Date(t.createdAt).getTime()) / 86400000);
+      const statusCls = this.statusCls(t.status);
+      const ageColor = age > 30 ? '#ef4444' : age > 14 ? '#f59e0b' : '#10b981';
+      return `<tr>
+        <td style="white-space:nowrap;font-weight:600;color:var(--trimble-primary)">${this.esc(t.id.substring(0, 8))}</td>
+        <td><span class="badge badge-${statusCls}">${t.status}</span></td>
+        <td>${this.truncate(this.esc(t.title), 50)}</td>
+        <td style="color:var(--muted-foreground)">${this.esc(t.assignedTo || 'Non assigné')}</td>
+        <td style="color:var(--muted-foreground);white-space:nowrap">${this.fmtDate(t.createdAt)}</td>
+        <td style="white-space:nowrap"><span style="font-weight:700;color:${ageColor}">${age}j</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // =============================================
+  // RECENT FILES (paginated)
+  // =============================================
+
+  private renderRecentFilesTable(): void {
+    const container = document.getElementById('recent-files-container');
+    if (!container) return;
+
+    const sorted = [...this.allFiles].sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    const totalPages = Math.ceil(sorted.length / this.PAGE_SIZE);
+    const page = Math.min(this.recentFilesPage, totalPages || 1);
+    const start = (page - 1) * this.PAGE_SIZE;
+    const pageFiles = sorted.slice(start, start + this.PAGE_SIZE);
+
+    if (!sorted.length) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-state-text">Aucun fichier récent</div></div>';
+      return;
+    }
+
+    const paginationHtml = this.paginationHtml('recent-files', page, totalPages, sorted.length);
+
+    container.innerHTML = `
+      ${paginationHtml}
+      <div class="table-wrapper"><table class="table">
+        <thead><tr><th>Nom</th><th>Statut</th><th>Date</th><th>Auteur</th></tr></thead>
+        <tbody>${pageFiles.map(f => {
+          const ext = (f.extension || '').toLowerCase();
+          const age = this.relDate(new Date(f.uploadedAt));
+          return `<tr class="clickable-row">
+            <td><span class="badge-ext ${ext || 'default'}">${ext || '?'}</span> <span class="file-name" title="${this.esc(f.name)}">${this.esc(this.truncate(f.name, 70))}</span></td>
+            <td><span class="badge badge-file">Nouveau</span></td>
+            <td style="color:var(--muted-foreground);white-space:nowrap">${age}</td>
+            <td style="color:var(--muted-foreground)">${this.esc(f.uploadedBy)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <div class="click-hint">Cliquez sur un fichier pour l'ouvrir dans Trimble Connect</div>`;
+
+    this.attachPagination('recent-files', totalPages, (p) => { this.recentFilesPage = p; this.renderRecentFilesTable(); });
+  }
+
+  // =============================================
+  // RECENT BCF (paginated)
+  // =============================================
+
+  private renderRecentBCFTable(): void {
+    const container = document.getElementById('recent-bcf-container');
+    if (!container) return;
+
+    const sorted = [...this.allTopics].sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+    const totalPages = Math.ceil(sorted.length / this.PAGE_SIZE);
+    const page = Math.min(this.recentBcfPage, totalPages || 1);
+    const start = (page - 1) * this.PAGE_SIZE;
+    const pageTopics = sorted.slice(start, start + this.PAGE_SIZE);
+
+    if (!sorted.length) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-state-text">Aucun BCF récent</div></div>';
+      return;
+    }
+
+    const paginationHtml = this.paginationHtml('recent-bcf', page, totalPages, sorted.length);
+
+    container.innerHTML = `
+      ${paginationHtml}
+      <div class="table-wrapper"><table class="table">
+        <thead><tr><th>N°</th><th>Statut</th><th>Titre</th><th>Assigné à</th><th>Créé le</th></tr></thead>
+        <tbody>${pageTopics.map(t => {
+          const statusCls = this.statusCls(t.status);
+          return `<tr class="clickable-row">
+            <td style="font-weight:600;color:var(--trimble-primary);white-space:nowrap">${this.esc(t.id.substring(0, 8))}</td>
+            <td><span class="badge badge-${statusCls}">${t.status}</span></td>
+            <td>${this.truncate(this.esc(t.title), 60)}</td>
+            <td style="color:var(--muted-foreground)">${this.esc(t.assignedTo || 'Non assigné')}</td>
+            <td style="color:var(--muted-foreground);white-space:nowrap">${this.fmtDate(t.createdAt)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <div class="click-hint">Cliquez sur un BCF pour l'ouvrir dans Trimble Connect</div>`;
+
+    this.attachPagination('recent-bcf', totalPages, (p) => { this.recentBcfPage = p; this.renderRecentBCFTable(); });
+  }
+
+  // =============================================
+  // PAGINATION
+  // =============================================
+
+  private paginationHtml(prefix: string, current: number, total: number, itemCount: number): string {
+    const buttons: string[] = [];
+    for (let i = 1; i <= Math.min(total, 7); i++) {
+      buttons.push(`<button class="pagination-btn ${prefix}-page-btn ${i === current ? 'active' : ''}" data-page="${i}">${i}</button>`);
+    }
+    return `<div class="pagination">${buttons.join('')}<span class="pagination-info">${itemCount} résultats</span></div>`;
+  }
+
+  private attachPagination(prefix: string, totalPages: number, callback: (page: number) => void): void {
+    document.querySelectorAll(`.${prefix}-page-btn`).forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const page = parseInt((e.target as HTMLElement).dataset.page || '1', 10);
+        if (page >= 1 && page <= totalPages) callback(page);
       });
     });
-  }
-
-  // =============================================
-  // FILES TABLE
-  // =============================================
-
-  private renderFilesTable(): void {
-    const tbody = document.getElementById('files-table-body');
-    if (!tbody) return;
-    const files = [...this.allFiles]
-      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
-      .slice(0, this.config.maxRecentFilesDisplay);
-    if (!files.length) {
-      tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><div class="empty-state-icon">📁</div><div class="empty-state-text">Aucun fichier</div></td></tr>';
-      return;
-    }
-    tbody.innerHTML = files.map(f => `<tr>
-      <td><span class="file-icon">${this.fileIcon(f.extension)}</span><span class="file-name" title="${this.esc(f.name)}">${this.esc(f.name)}</span></td>
-      <td style="color:var(--muted-foreground);white-space:nowrap">${this.fmtDate(f.uploadedAt)}</td>
-      <td style="color:var(--muted-foreground)">${this.esc(f.uploadedBy)}</td>
-    </tr>`).join('');
   }
 
   // =============================================
@@ -487,14 +733,13 @@ export class Dashboard {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 16);
     if (!views.length) {
-      c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👁️</div><div class="empty-state-text">Aucune vue</div></div>';
+      c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">visibility</i></div><div class="empty-state-text">Aucune vue</div></div>';
       return;
     }
     c.innerHTML = views.map(v => {
-      // If the view already has a thumbnail URL from the API, use it directly
       const thumbContent = v.thumbnail
         ? `<img src="${this.esc(v.thumbnail)}" alt="${this.esc(v.name)}" />`
-        : '<span class="thumb-loading">🖼️</span>';
+        : '<span class="thumb-loading"><i class="modus-icon">image</i></span>';
       return `<div class="view-item">
         <div class="view-thumbnail" data-view-id="${v.id}">${thumbContent}</div>
         <div class="view-name" title="${this.esc(v.name)}">${this.esc(v.name)}</div>
@@ -504,25 +749,18 @@ export class Dashboard {
   }
 
   private async loadThumbnails(): Promise<void> {
-    // Only fetch thumbnails for views that don't already have one
     const thumbEls = document.querySelectorAll('.view-thumbnail[data-view-id]');
     const els = Array.from(thumbEls).filter(el => el.querySelector('.thumb-loading'));
     if (!els.length) return;
 
-    logger.info(`Loading thumbnails for ${els.length} views...`);
     for (let i = 0; i < els.length; i += 4) {
       await Promise.all(els.slice(i, i + 4).map(async (el) => {
         const viewId = (el as HTMLElement).dataset.viewId;
         if (!viewId) return;
         try {
           const url = await viewsService.getThumbnailUrl(viewId);
-          if (url) {
-            (el as HTMLElement).innerHTML = `<img src="${url}" alt="thumbnail" />`;
-            logger.debug(`Thumbnail loaded for view ${viewId}`);
-          }
-        } catch {
-          logger.debug(`Thumbnail not available for view ${viewId}`);
-        }
+          if (url) (el as HTMLElement).innerHTML = `<img src="${url}" alt="thumbnail" />`;
+        } catch { /* thumbnail not available */ }
       }));
     }
   }
@@ -535,7 +773,7 @@ export class Dashboard {
     const c = document.getElementById('team-list');
     if (!c) return;
     const members = this.getTeamMembers();
-    if (!members.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div><div class="empty-state-text">Aucun membre</div></div>'; return; }
+    if (!members.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">people</i></div><div class="empty-state-text">Aucun membre</div></div>'; return; }
     const colors = ['#005F9E', '#00A3E0', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
     c.innerHTML = members.slice(0, 10).map((m, i) => `<div class="team-member">
       <div class="team-avatar" style="background:${colors[i % colors.length]}">${this.initials(m.name)}</div>
@@ -576,7 +814,7 @@ export class Dashboard {
     this.allViews.forEach(v => items.push({ id: v.id, type: 'view', title: v.name, date: new Date(v.createdAt), author: v.createdBy }));
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
 
-    if (!items.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><div class="empty-state-text">Aucune activité</div></div>'; return; }
+    if (!items.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">schedule</i></div><div class="empty-state-text">Aucune activité</div></div>'; return; }
     const labels: Record<string, string> = { file: 'Fichier', bcf: 'BCF', note: 'Note', view: 'Vue' };
     c.innerHTML = items.slice(0, 12).map(a => `<div class="timeline-item">
       <div class="timeline-dot ${a.type}"></div>
@@ -591,10 +829,11 @@ export class Dashboard {
   // HELPERS
   // =============================================
 
-  private statusCls(s: string): string { return s === 'In Progress' ? 'inprogress' : s.toLowerCase(); }
-  private fileIcon(ext: string): string {
-    const m: Record<string, string> = { ifc: '🏗️', pdf: '📄', dwg: '📐', rvt: '🏢', png: '🖼️', jpg: '🖼️', jpeg: '🖼️', xlsx: '📊', docx: '📝', zip: '📦', mp4: '🎥', nwd: '🔷', trb: '🔷' };
-    return m[(ext || '').toLowerCase()] || '📎';
+  private statusCls(s: string): string {
+    if (s === 'In Progress') return 'inprogress';
+    if (s === 'Open') return 'new';
+    if (s === 'Resolved') return 'waiting';
+    return s.toLowerCase();
   }
   private initials(n: string): string { const p = n.trim().split(/\s+/); return p.length >= 2 ? (p[0][0] + p[p.length - 1][0]).toUpperCase() : n.substring(0, 2).toUpperCase(); }
   private fmtDate(d: Date | string): string { return new Date(d).toLocaleDateString('fr-FR'); }
@@ -618,72 +857,88 @@ export class Dashboard {
 
   private getTemplate(): string {
     const tileOrder = this.tileConfig.order;
+    const themeIcon = this.isDark() ? 'light_mode' : 'dark_mode';
+    const themeLabel = this.isDark() ? 'Clair' : 'Sombre';
 
-    // Individual tile content for each card
     const tiles: Record<string, string> = {
-      'notes-metric': this.metricHtml('notes-count', 'Notes Actives', 'notes', '📝'),
-      'bcf-metric': this.metricHtml('bcf-count', 'BCF En Cours', 'bcf', '🔧'),
-      'files-metric': this.metricHtml('files-count', 'Fichiers Projet', 'files', '📁'),
-      'views-metric': this.metricHtml('views-count', 'Vues Créées', 'views', '👁️'),
+      'files-deposited-metric': this.metricHtml('files-deposited-val', 'Fichiers déposés', 'green', 'folder'),
+      'bcf-topics-metric': this.metricHtml('bcf-topics-val', 'Topics BCF', 'red', 'warning'),
+      'bcf-active-metric': this.metricHtml('bcf-active-val', 'BCF actifs', 'red', 'error'),
+      'bcf-resolved-metric': this.metricHtml('bcf-resolved-val', 'BCF résolus', 'green', 'check_circle'),
+      'bcf-inprogress-metric': this.metricHtml('bcf-inprogress-val', 'En cours', 'yellow', 'pending'),
+      'file-types-metric': this.metricHtml('file-types-val', 'Types de fichiers', 'orange', 'content_copy'),
+      'contributors-metric': this.metricHtml('contributors-val', 'Contributeurs', 'blue', 'people'),
+      'resolution-rate-metric': this.metricHtml('resolution-rate-val', 'Taux résolution', 'teal', 'bar_graph'),
 
-      'bcf-status-chart': `<div class="card"><div class="card-header"><h3>BCF par statut</h3><span class="card-icon">📊</span></div><div class="card-content"><div class="chart-container"><canvas id="bcf-chart"></canvas></div></div></div>`,
-      'bcf-priority-chart': `<div class="card"><div class="card-header"><h3>BCF par priorité</h3><span class="card-icon">🎯</span></div><div class="card-content"><div class="chart-container"><canvas id="bcf-priority-chart"></canvas></div></div></div>`,
-      'files-trend-chart': `<div class="card card-dark"><div class="card-header"><h3>Tendance Fichiers</h3><div class="chart-period-tabs"><button class="chart-period-btn" data-period="30">30 jours</button><button class="chart-period-btn active" data-period="7">7 jours</button><button class="chart-period-btn" data-period="3">3 jours</button></div></div><div class="card-content"><div class="chart-container"><canvas id="files-chart"></canvas></div></div></div>`,
-      'filetype-chart': `<div class="card"><div class="card-header"><h3>Types de fichiers</h3><span class="card-icon">🗂️</span></div><div class="card-content"><div class="chart-container"><canvas id="filetype-chart"></canvas></div></div></div>`,
+      'cumulative-chart': `<div class="card"><div class="card-header"><h3>Fichiers déposés — évolution cumulatif</h3><span class="card-icon"><i class="modus-icon">line_graph</i></span></div><div class="card-content"><div class="chart-container chart-tall"><canvas id="cumulative-canvas"></canvas></div></div></div>`,
+      'deposit-freq-chart': `<div class="card"><div class="card-header"><h3>Fréquence de dépôt (26 dernières semaines)</h3><span class="card-icon"><i class="modus-icon">bar_graph</i></span></div><div class="card-content"><div class="chart-container chart-tall"><canvas id="deposit-freq-canvas"></canvas></div></div></div>`,
+      'bcf-status-donut': `<div class="card"><div class="card-header"><h3>BCF par statut</h3><span class="card-icon"><i class="modus-icon">pie_chart</i></span></div><div class="card-content"><div class="chart-container"><canvas id="bcf-status-donut-canvas"></canvas></div></div></div>`,
+      'bcf-created-resolved': `<div class="card"><div class="card-header"><h3>BCF créés vs résolus dans le temps</h3><div class="chart-period-tabs"><button class="bcf-cr-period-btn active" data-period="7">7 sem.</button><button class="bcf-cr-period-btn" data-period="30">Tout</button></div></div><div class="card-content"><div class="chart-container"><canvas id="bcf-created-resolved-canvas"></canvas></div></div></div>`,
+      'bcf-priority-chart': `<div class="card"><div class="card-header"><h3>BCF par priorité</h3><span class="card-icon"><i class="modus-icon">pie_chart</i></span></div><div class="card-content"><div class="chart-container"><canvas id="bcf-priority-canvas"></canvas></div></div></div>`,
+      'bcf-assignee-chart': `<div class="card"><div class="card-header"><h3>BCF par personne assignée</h3><span class="card-icon"><i class="modus-icon">people</i></span></div><div class="card-content"><div id="bcf-assignee-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+      'filetype-chart': `<div class="card"><div class="card-header"><h3>Fichiers par type</h3><span class="card-icon"><i class="modus-icon">pie_chart</i></span></div><div class="card-content"><div class="chart-container"><canvas id="filetype-canvas"></canvas></div></div></div>`,
+      'top-contributors': `<div class="card"><div class="card-header"><h3>Top contributeurs (fichiers déposés)</h3><span class="card-icon"><i class="modus-icon">people</i></span></div><div class="card-content"><div id="top-contributors-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'bcf-table': `<div class="card"><div class="card-header"><h3>Topics BCF</h3><span class="card-icon">📋</span></div>
+      'top-updated-files': `<div class="card"><div class="card-header"><h3>Top 20 — Fichiers les plus mis à jour (nouvelles versions)</h3><span class="card-icon"><i class="modus-icon">file_upload</i></span></div>
         <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
-          <thead><tr><th>Titre</th><th>Statut</th><th>Priorité</th><th>Assigné</th><th>Modifié</th></tr></thead>
-          <tbody id="bcf-table-body"><tr><td colspan="5" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
+          <thead><tr><th style="width:2rem">#</th><th>Nom</th><th style="width:8rem">Versions</th></tr></thead>
+          <tbody id="top-updated-files-body"><tr><td colspan="3" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
         </table></div></div></div>`,
 
-      'files-table': `<div class="card"><div class="card-header"><h3>Derniers Fichiers</h3><span class="card-icon">📁</span></div>
+      'oldest-unresolved-bcf': `<div class="card"><div class="card-header"><h3>Top 3 — BCF non résolus les plus anciens</h3><span class="card-icon"><i class="modus-icon">warning</i></span></div>
         <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
-          <thead><tr><th>Nom</th><th>Date</th><th>Auteur</th></tr></thead>
-          <tbody id="files-table-body"><tr><td colspan="3" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
+          <thead><tr><th>N°</th><th>Statut</th><th>Titre</th><th>Assigné à</th><th>Créé le</th><th>Âge</th></tr></thead>
+          <tbody id="oldest-bcf-body"><tr><td colspan="6" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
         </table></div></div></div>`,
 
-      'team': `<div class="card"><div class="card-header"><h3>Équipe projet</h3><span class="card-icon">👥</span></div>
+      'recent-files-table': `<div class="card"><div class="card-header"><h3>Fichiers récents</h3><span class="card-icon"><i class="modus-icon">folder_open</i></span></div>
+        <div class="card-content" style="padding:0"><div id="recent-files-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+
+      'recent-bcf-table': `<div class="card"><div class="card-header"><h3>BCF récents</h3><span class="card-icon"><i class="modus-icon">assignment</i></span></div>
+        <div class="card-content" style="padding:0"><div id="recent-bcf-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+
+      'team': `<div class="card"><div class="card-header"><h3>Équipe projet</h3><span class="card-icon"><i class="modus-icon">people</i></span></div>
         <div class="card-content"><div id="team-list" class="team-list"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'timeline': `<div class="card"><div class="card-header"><h3>Activité récente</h3><span class="card-icon">📅</span></div>
+      'timeline': `<div class="card"><div class="card-header"><h3>Activité récente</h3><span class="card-icon"><i class="modus-icon">schedule</i></span></div>
         <div class="card-content"><div id="timeline" class="timeline"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'views': `<div class="card"><div class="card-header"><h3>Vues 3D sauvegardées</h3><span class="card-icon">👁️</span></div>
+      'views': `<div class="card"><div class="card-header"><h3>Vues 3D sauvegardées</h3><span class="card-icon"><i class="modus-icon">visibility</i></span></div>
         <div class="card-content"><div id="views-grid" class="views-grid"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
     };
 
-    // Build settings panel organized by category
     const categories = ['Métriques', 'Graphiques', 'Tableaux', 'Projet'];
     const settingsHtml = categories.map(cat => {
       const catTiles = TILE_DEFS.filter(t => t.cat === cat);
       return `<div class="settings-section-title">${cat}</div>
         <div class="settings-grid">${catTiles.map(t =>
-        `<label class="settings-item"><input type="checkbox" data-tile="${t.id}" ${this.tileConfig.hidden.includes(t.id) ? '' : 'checked'}/>${t.icon} ${t.label}</label>`
+        `<label class="settings-item"><input type="checkbox" data-tile="${t.id}" ${this.tileConfig.hidden.includes(t.id) ? '' : 'checked'}/><i class="modus-icon" style="font-size:0.875rem">${t.icon}</i> ${t.label}</label>`
       ).join('')}</div>`;
     }).join('');
 
-    // Build tiles in configured order
     const tilesHtml = tileOrder.map(id => {
       const content = tiles[id];
       if (!content) return '';
       const def = TILE_DEFS.find(d => d.id === id);
       const size = def ? def.size : 1;
       const hidden = this.tileConfig.hidden.includes(id) ? ' hidden-tile' : '';
-      return `<div class="tile${hidden}" data-tile-id="${id}" data-size="${size}"><div class="tile-drag-handle" title="Déplacer">⠿</div>${content}</div>`;
+      return `<div class="tile${hidden}" data-tile-id="${id}" data-size="${size}"><div class="tile-drag-handle" title="Déplacer"><i class="modus-icon" style="font-size:10px">drag_indicator</i></div>${content}</div>`;
     }).join('');
+
+    const projectDisplay = this.projectName ? this.projectName : 'Projet Trimble Connect';
 
     return `
       <div class="dashboard">
         <div class="dashboard-header">
           <div class="header-content">
-            <h1>📊 Dashboard du projet</h1>
-            <p>Vue d'ensemble de votre projet Trimble Connect</p>
+            <h1>Tableau de bord projet</h1>
+            <span class="project-name">${this.esc(projectDisplay)}</span>
           </div>
           <div class="header-actions">
-            <button class="btn-header" id="btn-export">📄 Exporter PDF</button>
+            <button class="theme-toggle" id="btn-theme"><i class="modus-icon">${themeIcon}</i> ${themeLabel}</button>
+            <button class="btn-header" id="btn-export"><i class="modus-icon">download</i> Exporter PDF</button>
             <div class="settings-wrapper">
-              <button class="btn-header" id="btn-settings">⚙️ Personnaliser</button>
+              <button class="btn-header" id="btn-settings"><i class="modus-icon">settings</i> Personnaliser</button>
               <div class="settings-panel" id="settings-panel" style="display:none">
                 <div class="settings-header">
                   <h4>Personnaliser le dashboard</h4>
@@ -694,15 +949,19 @@ export class Dashboard {
             </div>
           </div>
         </div>
+        <div class="dashboard-tabs">
+          <button class="dashboard-tab active">Tableau de bord</button>
+          <button class="dashboard-tab" id="tab-settings">Paramètres</button>
+        </div>
         <div id="error-container"></div>
         <div id="loader" class="loader-container" style="display:none"><div class="spinner"></div></div>
         <div class="tiles-container" id="tiles-container">${tilesHtml}</div>
       </div>`;
   }
 
-  private metricHtml(id: string, label: string, cls: string, icon: string): string {
+  private metricHtml(id: string, label: string, color: string, icon: string): string {
     return `<div class="card metric-card">
-      <div class="card-header"><span class="metric-label">${label}</span><span class="metric-icon ${cls}">${icon}</span></div>
+      <div class="card-header"><span class="metric-label">${label}</span><div class="metric-icon-wrapper ${color}"><i class="modus-icon">${icon}</i></div></div>
       <div class="card-content">
         <div class="metric-value" id="${id}">0</div>
         <div id="${id}-trend" class="metric-trend trend-neutral"><span>─</span> Chargement...</div>

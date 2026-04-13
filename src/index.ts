@@ -174,24 +174,10 @@ function createSidebarMenu(): void {
     title: 'Dashboard',
     icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png',
     command: 'show_dashboard',
-    subMenus: [
-      {
-        title: 'Vue d\'ensemble',
-        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png',
-        command: 'show_overview',
-      },
-      {
-        title: 'Actualiser',
-        icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png',
-        command: 'refresh_data',
-      }
-    ],
   };
 
-  // Mettre à jour le menu Trimble Connect
   workspaceAPI.ui.setMenu(mainMenuObject);
-  logger.info('✓ Sidebar menu created');
-  // Ne PAS appeler setActiveMenuItem ici — laisser l'utilisateur naviguer librement
+  logger.info('✓ Sidebar menu created (no submenus)');
 }
 
 /**
@@ -246,15 +232,8 @@ async function handleCommand(command: string): Promise<void> {
 
   switch (command) {
     case 'show_dashboard':
-    case 'show_overview':
-      // Afficher le dashboard
       await showDashboard();
       workspaceAPI.ui.setActiveMenuItem(command);
-      break;
-      
-    case 'refresh_data':
-      // Rafraîchir les données
-      await refreshDashboard();
       break;
       
     default:
@@ -277,24 +256,6 @@ async function showDashboard(): Promise<void> {
     logger.info('✓ Dashboard displayed/refreshed');
   } catch (error) {
     logger.error('Failed to show dashboard', { error });
-  }
-}
-
-/**
- * Rafraîchir les données du dashboard
- */
-async function refreshDashboard(): Promise<void> {
-  if (!dashboard) {
-    logger.error('Dashboard not initialized');
-    return;
-  }
-
-  try {
-    logger.info('Refreshing dashboard data...');
-    await dashboard.render(); // Re-render pour rafraîchir les données
-    logger.info('✓ Data refreshed');
-  } catch (error) {
-    logger.error('Failed to refresh data', { error });
   }
 }
 
@@ -499,6 +460,10 @@ async function initializeWithToken(accessToken: string, projectInfo: any): Promi
     maxRecentFilesDisplay: 10,
     enableAutoRefresh: false,
   });
+
+  if (projectInfo && projectInfo.name) {
+    dashboard.setProjectName(`${projectInfo.id || ''} - ${projectInfo.name}`);
+  }
 
   await dashboard.render();
   

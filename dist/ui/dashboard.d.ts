@@ -1,20 +1,27 @@
 /**
- * Dashboard principal — shadcn/ui design
- * 4-column grid, individual draggable tiles, expandable BCF, thumbnails
+ * Dashboard principal — Modus 2.0 design, dark/light theme
+ * 4-column grid, draggable tiles, 8 KPI metrics, 6 charts,
+ * tables with pagination, contributor bars, BCF age tracking
  */
-import { DashboardConfig } from '../models/types';
 import './styles.css';
 export declare class Dashboard {
     private chartsManager;
-    private config;
     private containerId;
     private tileConfig;
     private dragRAF;
+    private projectName;
     private allTopics;
     private allFiles;
     private allNotes;
     private allViews;
-    constructor(containerId?: string, config?: Partial<DashboardConfig>);
+    private recentFilesPage;
+    private recentBcfPage;
+    private readonly PAGE_SIZE;
+    constructor(containerId?: string, _config?: Record<string, any>);
+    setProjectName(name: string): void;
+    private loadTheme;
+    private toggleTheme;
+    private isDark;
     private loadTileConfig;
     private saveTileConfig;
     private resetTileConfig;
@@ -28,18 +35,24 @@ export declare class Dashboard {
     private trend;
     private setMetric;
     private renderCharts;
-    private renderFilesTrendChart;
-    private attachChartPeriodButtons;
-    private renderBCFTable;
-    private attachBCFExpand;
-    private renderFilesTable;
+    private renderCumulativeChart;
+    private renderDepositFrequencyChart;
+    private renderBCFCreatedResolvedChart;
+    private attachBcfCreatedResolvedPeriod;
+    private renderBCFAssigneeChart;
+    private renderTopContributors;
+    private renderTopUpdatedFiles;
+    private renderOldestUnresolvedBCF;
+    private renderRecentFilesTable;
+    private renderRecentBCFTable;
+    private paginationHtml;
+    private attachPagination;
     private renderViewsSection;
     private loadThumbnails;
     private renderTeamSection;
     private getTeamMembers;
     private renderTimeline;
     private statusCls;
-    private fileIcon;
     private initials;
     private fmtDate;
     private relDate;
