@@ -951,7 +951,6 @@ export class Dashboard {
         </div>
         <div class="dashboard-tabs">
           <button class="dashboard-tab active">Tableau de bord</button>
-          <button class="dashboard-tab" id="tab-settings">Paramètres</button>
         </div>
         <div id="error-container"></div>
         <div id="loader" class="loader-container" style="display:none"><div class="spinner"></div></div>
