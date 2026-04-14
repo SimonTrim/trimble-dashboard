@@ -456,6 +456,42 @@ app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/projects/:projectId/views/:viewId/thumbnail
+ * Récupère la vignette d'une vue via l'API v2.0
+ * Endpoint Trimble: GET /tc/api/2.0/views/{viewId}/thumbnail?projectId={projectId}
+ */
+app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (req, res) => {
+  try {
+    const { projectId, viewId } = req.params;
+    const apiBase = TRIMBLE_API_BASE[req.region];
+    const apiUrl = `${apiBase}/2.0/views/${viewId}/thumbnail?projectId=${projectId}`;
+    
+    console.log(`📡 Calling Trimble Thumbnail API: ${apiUrl}`);
+    
+    const response = await fetch(apiUrl, {
+      headers: {
+        'Authorization': `Bearer ${req.accessToken}`,
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`⚠️ Thumbnail not available for view ${viewId}: ${response.status}`);
+      return res.status(response.status).json({ error: 'Thumbnail not available' });
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/png';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+
+    const buffer = await response.buffer();
+    res.send(buffer);
+  } catch (error) {
+    console.error('❌ Thumbnail API error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/auth/status
  * Vérifie le statut d'authentification
  */

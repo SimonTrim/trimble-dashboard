@@ -756,8 +756,23 @@ export class Dashboard {
         if (!viewId) return;
         try {
           const url = await viewsService.getThumbnailUrl(viewId);
-          if (url) (el as HTMLElement).innerHTML = `<img src="${url}" alt="thumbnail" />`;
-        } catch { /* thumbnail not available */ }
+          if (url) {
+            const img = document.createElement('img');
+            img.alt = 'thumbnail';
+            img.src = url;
+            img.onload = () => {
+              (el as HTMLElement).innerHTML = '';
+              (el as HTMLElement).appendChild(img);
+            };
+            img.onerror = () => {
+              (el as HTMLElement).innerHTML = '<span class="thumb-placeholder"><i class="modus-icon mi-visibility-on"></i></span>';
+            };
+          } else {
+            (el as HTMLElement).innerHTML = '<span class="thumb-placeholder"><i class="modus-icon mi-visibility-on"></i></span>';
+          }
+        } catch {
+          (el as HTMLElement).innerHTML = '<span class="thumb-placeholder"><i class="modus-icon mi-visibility-on"></i></span>';
+        }
       }));
     }
   }
