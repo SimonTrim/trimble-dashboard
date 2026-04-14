@@ -257,7 +257,7 @@ async function requireAuth(req, res, next) {
     
     // Attacher le token à la requête (pas de refresh possible en mode intégré)
     req.accessToken = accessToken;
-    req.region = 'europe'; // Région par défaut, peut être modifiée selon besoin
+    req.region = req.headers['x-project-region'] || 'europe';
     return next();
   }
 

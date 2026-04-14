@@ -734,11 +734,8 @@ export class Dashboard {
       return;
     }
     c.innerHTML = views.map(v => {
-      const thumbContent = v.thumbnail
-        ? `<img src="${this.esc(v.thumbnail)}" alt="${this.esc(v.name)}" />`
-        : '<span class="thumb-loading"><i class="modus-icon mi-visibility-on"></i></span>';
       return `<div class="view-item">
-        <div class="view-thumbnail" data-view-id="${v.id}">${thumbContent}</div>
+        <div class="view-thumbnail" data-view-id="${v.id}"><span class="thumb-loading"><i class="modus-icon mi-visibility-on"></i></span></div>
         <div class="view-name" title="${this.esc(v.name)}">${this.esc(v.name)}</div>
         <div class="view-meta">${this.esc(v.createdBy)} · ${this.fmtDate(v.createdAt)}</div>
       </div>`;
