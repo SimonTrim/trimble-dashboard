@@ -730,13 +730,13 @@ export class Dashboard {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 16);
     if (!views.length) {
-      c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">visibility-on</i></div><div class="empty-state-text">Aucune vue</div></div>';
+      c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon mi-visibility-on"></i></div><div class="empty-state-text">Aucune vue</div></div>';
       return;
     }
     c.innerHTML = views.map(v => {
       const thumbContent = v.thumbnail
         ? `<img src="${this.esc(v.thumbnail)}" alt="${this.esc(v.name)}" />`
-        : '<span class="thumb-loading"><i class="modus-icon">image</i></span>';
+        : '<span class="thumb-loading"><i class="modus-icon mi-visibility-on"></i></span>';
       return `<div class="view-item">
         <div class="view-thumbnail" data-view-id="${v.id}">${thumbContent}</div>
         <div class="view-name" title="${this.esc(v.name)}">${this.esc(v.name)}</div>
@@ -770,7 +770,7 @@ export class Dashboard {
     const c = document.getElementById('team-list');
     if (!c) return;
     const members = this.getTeamMembers();
-    if (!members.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">people-group</i></div><div class="empty-state-text">Aucun membre</div></div>'; return; }
+    if (!members.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon mi-people-group"></i></div><div class="empty-state-text">Aucun membre</div></div>'; return; }
     const colors = ['#005F9E', '#00A3E0', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
     c.innerHTML = members.slice(0, 10).map((m, i) => `<div class="team-member">
       <div class="team-avatar" style="background:${colors[i % colors.length]}">${this.initials(m.name)}</div>
@@ -811,7 +811,7 @@ export class Dashboard {
     this.allViews.forEach(v => items.push({ id: v.id, type: 'view', title: v.name, date: new Date(v.createdAt), author: v.createdBy }));
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
 
-    if (!items.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">clock</i></div><div class="empty-state-text">Aucune activité</div></div>'; return; }
+    if (!items.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon mi-clock"></i></div><div class="empty-state-text">Aucune activité</div></div>'; return; }
     const labels: Record<string, string> = { file: 'Fichier', bcf: 'BCF', note: 'Note', view: 'Vue' };
     c.innerHTML = items.slice(0, 12).map(a => `<div class="timeline-item">
       <div class="timeline-dot ${a.type}"></div>
@@ -855,11 +855,11 @@ export class Dashboard {
   private chartTypeState: Record<string, string> = {};
 
   private chartTypeSwitcher(chartId: string, types: string[]): string {
-    const icons: Record<string, string> = {
-      line: 'line-graph',
-      bar: 'bar-graph',
-      doughnut: 'dashboard',
-      pie: 'dashboard',
+    const svgs: Record<string, string> = {
+      line: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1,12 5,5 9,9 15,2"/></svg>',
+      bar: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="9" width="3" height="6" rx="0.5"/><rect x="6.5" y="4" width="3" height="11" rx="0.5"/><rect x="12" y="7" width="3" height="8" rx="0.5"/></svg>',
+      doughnut: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="3"><circle cx="8" cy="8" r="5"/><line x1="8" y1="3" x2="8" y2="1" stroke-width="1.5"/></svg>',
+      pie: '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 7 7h-7z" opacity="0.6"/><path d="M9 0v7h7A7 7 0 0 0 9 0z"/></svg>',
     };
     const labels: Record<string, string> = {
       line: 'Ligne',
@@ -869,7 +869,7 @@ export class Dashboard {
     };
     const current = this.chartTypeState[chartId] || types[0];
     return `<div class="chart-type-switcher" data-chart-id="${chartId}">${types.map(t =>
-      `<button class="chart-type-btn ${t === current ? 'active' : ''}" data-chart-type="${t}" data-chart-id="${chartId}" title="${labels[t]}"><i class="modus-icon">${icons[t]}</i></button>`
+      `<button class="chart-type-btn ${t === current ? 'active' : ''}" data-chart-type="${t}" data-chart-id="${chartId}" title="${labels[t]}">${svgs[t]}</button>`
     ).join('')}</div>`;
   }
 
@@ -979,35 +979,35 @@ export class Dashboard {
       'bcf-status-donut': `<div class="card"><div class="card-header"><h3>BCF par statut</h3>${this.chartTypeSwitcher('bcf-status', ['doughnut', 'bar', 'pie'])}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-status-donut-canvas"></canvas></div></div></div>`,
       'bcf-created-resolved': `<div class="card"><div class="card-header"><h3>BCF créés vs résolus dans le temps</h3><div class="chart-period-tabs"><button class="bcf-cr-period-btn active" data-period="7">7 sem.</button><button class="bcf-cr-period-btn" data-period="30">Tout</button></div></div><div class="card-content"><div class="chart-container"><canvas id="bcf-created-resolved-canvas"></canvas></div></div></div>`,
       'bcf-priority-chart': `<div class="card"><div class="card-header"><h3>BCF par priorité</h3>${this.chartTypeSwitcher('bcf-priority', ['doughnut', 'bar', 'pie'])}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-priority-canvas"></canvas></div></div></div>`,
-      'bcf-assignee-chart': `<div class="card"><div class="card-header"><h3>BCF par personne assignée</h3><span class="card-icon"><i class="modus-icon">people-group</i></span></div><div class="card-content"><div id="bcf-assignee-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+      'bcf-assignee-chart': `<div class="card"><div class="card-header"><h3>BCF par personne assignée</h3><span class="card-icon"><i class="modus-icon mi-people-group"></i></span></div><div class="card-content"><div id="bcf-assignee-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
       'filetype-chart': `<div class="card"><div class="card-header"><h3>Fichiers par type</h3>${this.chartTypeSwitcher('filetype', ['pie', 'doughnut', 'bar'])}</div><div class="card-content"><div class="chart-container"><canvas id="filetype-canvas"></canvas></div></div></div>`,
-      'top-contributors': `<div class="card"><div class="card-header"><h3>Top contributeurs (fichiers déposés)</h3><span class="card-icon"><i class="modus-icon">people-group</i></span></div><div class="card-content"><div id="top-contributors-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+      'top-contributors': `<div class="card"><div class="card-header"><h3>Top contributeurs (fichiers déposés)</h3><span class="card-icon"><i class="modus-icon mi-people-group"></i></span></div><div class="card-content"><div id="top-contributors-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'top-updated-files': `<div class="card"><div class="card-header"><h3>Top 20 — Fichiers les plus mis à jour (nouvelles versions)</h3><span class="card-icon"><i class="modus-icon">upload</i></span></div>
+      'top-updated-files': `<div class="card"><div class="card-header"><h3>Top 20 — Fichiers les plus mis à jour (nouvelles versions)</h3><span class="card-icon"><i class="modus-icon mi-upload"></i></span></div>
         <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
           <thead><tr><th style="width:2rem">#</th><th>Nom</th><th style="width:8rem">Versions</th></tr></thead>
           <tbody id="top-updated-files-body"><tr><td colspan="3" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
         </table></div></div></div>`,
 
-      'oldest-unresolved-bcf': `<div class="card"><div class="card-header"><h3>Top 3 — BCF non résolus les plus anciens</h3><span class="card-icon"><i class="modus-icon">warning</i></span></div>
+      'oldest-unresolved-bcf': `<div class="card"><div class="card-header"><h3>Top 3 — BCF non résolus les plus anciens</h3><span class="card-icon"><i class="modus-icon mi-warning"></i></span></div>
         <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
           <thead><tr><th>N°</th><th>Statut</th><th>Titre</th><th>Assigné à</th><th>Créé le</th><th>Âge</th></tr></thead>
           <tbody id="oldest-bcf-body"><tr><td colspan="6" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
         </table></div></div></div>`,
 
-      'recent-files-table': `<div class="card"><div class="card-header"><h3>Fichiers récents</h3><span class="card-icon"><i class="modus-icon">folder-open</i></span></div>
+      'recent-files-table': `<div class="card"><div class="card-header"><h3>Fichiers récents</h3><span class="card-icon"><i class="modus-icon mi-folder-open"></i></span></div>
         <div class="card-content" style="padding:0"><div id="recent-files-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'recent-bcf-table': `<div class="card"><div class="card-header"><h3>BCF récents</h3><span class="card-icon"><i class="modus-icon">clipboard</i></span></div>
+      'recent-bcf-table': `<div class="card"><div class="card-header"><h3>BCF récents</h3><span class="card-icon"><i class="modus-icon mi-clipboard"></i></span></div>
         <div class="card-content" style="padding:0"><div id="recent-bcf-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'team': `<div class="card"><div class="card-header"><h3>Équipe projet</h3><span class="card-icon"><i class="modus-icon">people-group</i></span></div>
+      'team': `<div class="card"><div class="card-header"><h3>Équipe projet</h3><span class="card-icon"><i class="modus-icon mi-people-group"></i></span></div>
         <div class="card-content"><div id="team-list" class="team-list"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'timeline': `<div class="card"><div class="card-header"><h3>Activité récente</h3><span class="card-icon"><i class="modus-icon">clock</i></span></div>
+      'timeline': `<div class="card"><div class="card-header"><h3>Activité récente</h3><span class="card-icon"><i class="modus-icon mi-clock"></i></span></div>
         <div class="card-content"><div id="timeline" class="timeline"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'views': `<div class="card"><div class="card-header"><h3>Vues 3D sauvegardées</h3><span class="card-icon"><i class="modus-icon">visibility-on</i></span></div>
+      'views': `<div class="card"><div class="card-header"><h3>Vues 3D sauvegardées</h3><span class="card-icon"><i class="modus-icon mi-visibility-on"></i></span></div>
         <div class="card-content"><div id="views-grid" class="views-grid"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
     };
 
@@ -1026,7 +1026,7 @@ export class Dashboard {
       const def = TILE_DEFS.find(d => d.id === id);
       const size = def ? def.size : 1;
       const hidden = this.tileConfig.hidden.includes(id) ? ' hidden-tile' : '';
-      return `<div class="tile${hidden}" data-tile-id="${id}" data-size="${size}"><div class="tile-drag-handle" title="Déplacer"><i class="modus-icon" style="font-size:10px">drag-indicator</i></div>${content}</div>`;
+      return `<div class="tile${hidden}" data-tile-id="${id}" data-size="${size}"><div class="tile-drag-handle" title="Déplacer"><i class="modus-icon mi-drag-indicator" style="width:10px;height:10px"></i></div>${content}</div>`;
     }).join('');
 
     const projectDisplay = this.projectName ? this.projectName : 'Projet Trimble Connect';
@@ -1039,10 +1039,10 @@ export class Dashboard {
             <span class="project-name">${this.esc(projectDisplay)}</span>
           </div>
           <div class="header-actions">
-            <button class="theme-toggle" id="btn-theme"><i class="modus-icon">${themeIcon}</i> ${themeLabel}</button>
-            <button class="btn-header" id="btn-export"><i class="modus-icon">download</i> Exporter PDF</button>
+            <button class="theme-toggle" id="btn-theme"><i class="modus-icon mi-${themeIcon}"></i> ${themeLabel}</button>
+            <button class="btn-header" id="btn-export"><i class="modus-icon mi-download"></i> Exporter PDF</button>
             <div class="settings-wrapper">
-              <button class="btn-header" id="btn-settings"><i class="modus-icon">settings</i> Personnaliser</button>
+              <button class="btn-header" id="btn-settings"><i class="modus-icon mi-settings"></i> Personnaliser</button>
               <div class="settings-panel" id="settings-panel" style="display:none">
                 <div class="settings-header">
                   <h4>Personnaliser le dashboard</h4>
@@ -1064,7 +1064,7 @@ export class Dashboard {
 
   private metricHtml(id: string, label: string, color: string, icon: string): string {
     return `<div class="card metric-card">
-      <div class="card-header"><span class="metric-label">${label}</span><div class="metric-icon-wrapper ${color}"><i class="modus-icon">${icon}</i></div></div>
+      <div class="card-header"><span class="metric-label">${label}</span><div class="metric-icon-wrapper ${color}"><i class="modus-icon mi-${icon}"></i></div></div>
       <div class="card-content">
         <div class="metric-value" id="${id}">0</div>
         <div id="${id}-trend" class="metric-trend trend-neutral"><span>─</span> Chargement...</div>
