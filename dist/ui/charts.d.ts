@@ -8,23 +8,23 @@ export declare class ChartsManager {
     private destroyChart;
     private setChart;
     createBCFChart(canvasId: string, data: BCFStatusData): void;
-    createBCFPriorityChart(canvasId: string, data: BCFPriorityData): void;
+    createBCFPriorityChart(canvasId: string, data: BCFPriorityData, chartType?: string): void;
     createFilesTrendChart(canvasId: string, data: FileTrendDataPoint[]): void;
-    createFileTypeChart(canvasId: string, byExtension: Record<string, number>): void;
+    createFileTypeChart(canvasId: string, byExtension: Record<string, number>, chartType?: string): void;
     createCumulativeChart(canvasId: string, data: {
         label: string;
         cumulative: number;
-    }[]): void;
+    }[], chartType?: string): void;
     createDepositFrequencyChart(canvasId: string, data: {
         label: string;
         count: number;
-    }[]): void;
+    }[], chartType?: string): void;
     createBCFCreatedResolvedChart(canvasId: string, data: {
         label: string;
         created: number;
         resolved: number;
     }[]): void;
-    createBCFStatusDonutChart(canvasId: string, data: BCFStatusData): void;
+    createBCFStatusDonutChart(canvasId: string, data: BCFStatusData, chartType?: string): void;
     destroy(): void;
 }
 //# sourceMappingURL=charts.d.ts.map

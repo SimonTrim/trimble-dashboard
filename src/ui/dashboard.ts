@@ -25,36 +25,32 @@ import './styles.css';
 interface TileDef { id: string; label: string; icon: string; size: 1 | 2 | 4; cat: string; }
 
 const TILE_DEFS: TileDef[] = [
-  // 8 metric KPIs (row 1 & 2)
-  { id: 'files-deposited-metric',   label: 'Fichiers déposés',  icon: 'folder',           size: 1, cat: 'Métriques' },
+  { id: 'files-deposited-metric',   label: 'Fichiers déposés',  icon: 'folder-closed',    size: 1, cat: 'Métriques' },
   { id: 'bcf-topics-metric',        label: 'Topics BCF',        icon: 'warning',          size: 1, cat: 'Métriques' },
-  { id: 'bcf-active-metric',        label: 'BCF actifs',        icon: 'error',            size: 1, cat: 'Métriques' },
-  { id: 'bcf-resolved-metric',      label: 'BCF résolus',       icon: 'check_circle',     size: 1, cat: 'Métriques' },
-  { id: 'bcf-inprogress-metric',    label: 'En cours',          icon: 'pending',          size: 1, cat: 'Métriques' },
-  { id: 'file-types-metric',        label: 'Types de fichiers',  icon: 'content_copy',    size: 1, cat: 'Métriques' },
-  { id: 'contributors-metric',      label: 'Contributeurs',     icon: 'people',           size: 1, cat: 'Métriques' },
-  { id: 'resolution-rate-metric',   label: 'Taux résolution',   icon: 'bar_graph',        size: 1, cat: 'Métriques' },
+  { id: 'bcf-active-metric',        label: 'BCF actifs',        icon: 'cancel-circle',    size: 1, cat: 'Métriques' },
+  { id: 'bcf-resolved-metric',      label: 'BCF résolus',       icon: 'check-circle',     size: 1, cat: 'Métriques' },
+  { id: 'bcf-inprogress-metric',    label: 'En cours',          icon: 'clock',            size: 1, cat: 'Métriques' },
+  { id: 'file-types-metric',        label: 'Types de fichiers', icon: 'copy-content',     size: 1, cat: 'Métriques' },
+  { id: 'contributors-metric',      label: 'Contributeurs',     icon: 'people-group',     size: 1, cat: 'Métriques' },
+  { id: 'resolution-rate-metric',   label: 'Taux résolution',   icon: 'bar-graph',        size: 1, cat: 'Métriques' },
 
-  // Charts
-  { id: 'cumulative-chart',         label: 'Fichiers déposés — évolution cumulatif',  icon: 'line_graph', size: 2, cat: 'Graphiques' },
-  { id: 'deposit-freq-chart',       label: 'Fréquence de dépôt (26 dernières semaines)', icon: 'bar_graph', size: 2, cat: 'Graphiques' },
-  { id: 'bcf-status-donut',         label: 'BCF par statut',    icon: 'pie_chart',        size: 1, cat: 'Graphiques' },
-  { id: 'bcf-created-resolved',     label: 'BCF créés vs résolus dans le temps', icon: 'line_graph', size: 2, cat: 'Graphiques' },
-  { id: 'bcf-priority-chart',       label: 'BCF par priorité',  icon: 'pie_chart',        size: 1, cat: 'Graphiques' },
-  { id: 'bcf-assignee-chart',       label: 'BCF par personne assignée', icon: 'people',   size: 2, cat: 'Graphiques' },
-  { id: 'filetype-chart',           label: 'Fichiers par type', icon: 'pie_chart',        size: 2, cat: 'Graphiques' },
-  { id: 'top-contributors',         label: 'Top contributeurs (fichiers déposés)', icon: 'people', size: 2, cat: 'Graphiques' },
+  { id: 'cumulative-chart',         label: 'Fichiers déposés — évolution cumulatif',  icon: 'line-graph', size: 2, cat: 'Graphiques' },
+  { id: 'deposit-freq-chart',       label: 'Fréquence de dépôt (26 dernières semaines)', icon: 'bar-graph', size: 2, cat: 'Graphiques' },
+  { id: 'bcf-status-donut',         label: 'BCF par statut',    icon: 'dashboard',        size: 1, cat: 'Graphiques' },
+  { id: 'bcf-created-resolved',     label: 'BCF créés vs résolus dans le temps', icon: 'line-graph', size: 2, cat: 'Graphiques' },
+  { id: 'bcf-priority-chart',       label: 'BCF par priorité',  icon: 'dashboard',        size: 1, cat: 'Graphiques' },
+  { id: 'bcf-assignee-chart',       label: 'BCF par personne assignée', icon: 'people-group', size: 2, cat: 'Graphiques' },
+  { id: 'filetype-chart',           label: 'Fichiers par type', icon: 'dashboard',        size: 2, cat: 'Graphiques' },
+  { id: 'top-contributors',         label: 'Top contributeurs (fichiers déposés)', icon: 'people-group', size: 2, cat: 'Graphiques' },
 
-  // Tables
-  { id: 'top-updated-files',        label: 'Top 20 — Fichiers les plus mis à jour', icon: 'file_upload', size: 4, cat: 'Tableaux' },
+  { id: 'top-updated-files',        label: 'Top 20 — Fichiers les plus mis à jour', icon: 'upload', size: 4, cat: 'Tableaux' },
   { id: 'oldest-unresolved-bcf',    label: 'Top 3 — BCF non résolus les plus anciens', icon: 'warning', size: 4, cat: 'Tableaux' },
-  { id: 'recent-files-table',       label: 'Fichiers récents',  icon: 'folder_open',      size: 4, cat: 'Tableaux' },
-  { id: 'recent-bcf-table',         label: 'BCF récents',       icon: 'assignment',       size: 4, cat: 'Tableaux' },
+  { id: 'recent-files-table',       label: 'Fichiers récents',  icon: 'folder-open',      size: 4, cat: 'Tableaux' },
+  { id: 'recent-bcf-table',         label: 'BCF récents',       icon: 'clipboard',        size: 4, cat: 'Tableaux' },
 
-  // Project
-  { id: 'team',                     label: 'Équipe Projet',     icon: 'people',           size: 1, cat: 'Projet' },
-  { id: 'timeline',                 label: 'Activité Récente',  icon: 'schedule',         size: 1, cat: 'Projet' },
-  { id: 'views',                    label: 'Vues 3D',           icon: 'visibility',       size: 2, cat: 'Projet' },
+  { id: 'team',                     label: 'Équipe Projet',     icon: 'people-group',     size: 1, cat: 'Projet' },
+  { id: 'timeline',                 label: 'Activité Récente',  icon: 'clock',            size: 1, cat: 'Projet' },
+  { id: 'views',                    label: 'Vues 3D',           icon: 'visibility-on',    size: 2, cat: 'Projet' },
 ];
 
 const DEFAULT_ORDER = TILE_DEFS.map(t => t.id);
@@ -200,6 +196,7 @@ export class Dashboard {
       this.renderViewsSection();
       this.renderTeamSection();
       this.renderTimeline();
+      this.attachChartTypeSwitchers();
       this.hideLoader();
       this.loadThumbnails();
     } catch (error) {
@@ -733,7 +730,7 @@ export class Dashboard {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 16);
     if (!views.length) {
-      c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">visibility</i></div><div class="empty-state-text">Aucune vue</div></div>';
+      c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">visibility-on</i></div><div class="empty-state-text">Aucune vue</div></div>';
       return;
     }
     c.innerHTML = views.map(v => {
@@ -773,7 +770,7 @@ export class Dashboard {
     const c = document.getElementById('team-list');
     if (!c) return;
     const members = this.getTeamMembers();
-    if (!members.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">people</i></div><div class="empty-state-text">Aucun membre</div></div>'; return; }
+    if (!members.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">people-group</i></div><div class="empty-state-text">Aucun membre</div></div>'; return; }
     const colors = ['#005F9E', '#00A3E0', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
     c.innerHTML = members.slice(0, 10).map((m, i) => `<div class="team-member">
       <div class="team-avatar" style="background:${colors[i % colors.length]}">${this.initials(m.name)}</div>
@@ -814,7 +811,7 @@ export class Dashboard {
     this.allViews.forEach(v => items.push({ id: v.id, type: 'view', title: v.name, date: new Date(v.createdAt), author: v.createdBy }));
     items.sort((a, b) => b.date.getTime() - a.date.getTime());
 
-    if (!items.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">schedule</i></div><div class="empty-state-text">Aucune activité</div></div>'; return; }
+    if (!items.length) { c.innerHTML = '<div class="empty-state"><div class="empty-state-icon"><i class="modus-icon">clock</i></div><div class="empty-state-text">Aucune activité</div></div>'; return; }
     const labels: Record<string, string> = { file: 'Fichier', bcf: 'BCF', note: 'Note', view: 'Vue' };
     c.innerHTML = items.slice(0, 12).map(a => `<div class="timeline-item">
       <div class="timeline-dot ${a.type}"></div>
@@ -852,34 +849,141 @@ export class Dashboard {
   exportPDF(): void { window.print(); }
 
   // =============================================
+  // CHART TYPE SWITCHER
+  // =============================================
+
+  private chartTypeState: Record<string, string> = {};
+
+  private chartTypeSwitcher(chartId: string, types: string[]): string {
+    const icons: Record<string, string> = {
+      line: 'line-graph',
+      bar: 'bar-graph',
+      doughnut: 'dashboard',
+      pie: 'dashboard',
+    };
+    const labels: Record<string, string> = {
+      line: 'Ligne',
+      bar: 'Barres',
+      doughnut: 'Anneau',
+      pie: 'Camembert',
+    };
+    const current = this.chartTypeState[chartId] || types[0];
+    return `<div class="chart-type-switcher" data-chart-id="${chartId}">${types.map(t =>
+      `<button class="chart-type-btn ${t === current ? 'active' : ''}" data-chart-type="${t}" data-chart-id="${chartId}" title="${labels[t]}"><i class="modus-icon">${icons[t]}</i></button>`
+    ).join('')}</div>`;
+  }
+
+  private attachChartTypeSwitchers(): void {
+    document.querySelectorAll('.chart-type-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const chartId = target.dataset.chartId;
+        const chartType = target.dataset.chartType;
+        if (!chartId || !chartType) return;
+
+        const container = target.closest('.chart-type-switcher');
+        if (container) {
+          container.querySelectorAll('.chart-type-btn').forEach(b => b.classList.remove('active'));
+        }
+        target.classList.add('active');
+
+        this.chartTypeState[chartId] = chartType;
+        this.rerenderChart(chartId, chartType);
+      });
+    });
+  }
+
+  private rerenderChart(chartId: string, chartType: string): void {
+    const s: BCFStatusData = { open: 0, inProgress: 0, resolved: 0, closed: 0 };
+    const p: BCFPriorityData = { high: 0, medium: 0, low: 0 };
+    this.allTopics.forEach(t => {
+      if (t.status === 'Open') s.open++; else if (t.status === 'In Progress') s.inProgress++;
+      else if (t.status === 'Resolved') s.resolved++; else s.closed++;
+      const pr = (t.priority || 'Medium').toLowerCase();
+      if (pr === 'high') p.high++; else if (pr === 'low') p.low++; else p.medium++;
+    });
+
+    const ext: Record<string, number> = {};
+    this.allFiles.forEach(f => { const e = (f.extension || 'other').toLowerCase(); ext[e] = (ext[e] || 0) + 1; });
+
+    switch (chartId) {
+      case 'cumulative':
+        this.chartsManager.createCumulativeChart('cumulative-canvas', this.getCumulativeData(), chartType as any);
+        break;
+      case 'deposit-freq':
+        this.chartsManager.createDepositFrequencyChart('deposit-freq-canvas', this.getDepositFreqData(), chartType as any);
+        break;
+      case 'bcf-status':
+        this.chartsManager.createBCFStatusDonutChart('bcf-status-donut-canvas', s, chartType as any);
+        break;
+      case 'bcf-priority':
+        this.chartsManager.createBCFPriorityChart('bcf-priority-canvas', p, chartType as any);
+        break;
+      case 'filetype':
+        this.chartsManager.createFileTypeChart('filetype-canvas', ext, chartType as any);
+        break;
+    }
+  }
+
+  private getCumulativeData(): { label: string; cumulative: number }[] {
+    const byMonth: Record<string, number> = {};
+    this.allFiles.forEach(f => {
+      const d = new Date(f.uploadedAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      byMonth[key] = (byMonth[key] || 0) + 1;
+    });
+    const sorted = Object.keys(byMonth).sort();
+    let cumulative = 0;
+    return sorted.map(key => { cumulative += byMonth[key]; return { label: key, cumulative }; });
+  }
+
+  private getDepositFreqData(): { label: string; count: number }[] {
+    const now = new Date();
+    const weeks: { label: string; count: number }[] = [];
+    for (let i = 25; i >= 0; i--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - (i * 7) - weekStart.getDay() + 1);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      const count = this.allFiles.filter(f => {
+        const d = new Date(f.uploadedAt);
+        return d >= weekStart && d < weekEnd;
+      }).length;
+      weeks.push({ label: `${weekStart.getFullYear()}-w${String(Math.ceil((weekStart.getDate()) / 7)).padStart(2, '0')}`, count });
+    }
+    return weeks;
+  }
+
+  // =============================================
   // HTML TEMPLATE
   // =============================================
 
   private getTemplate(): string {
     const tileOrder = this.tileConfig.order;
-    const themeIcon = this.isDark() ? 'light_mode' : 'dark_mode';
+    const themeIcon = this.isDark() ? 'sun' : 'moon';
     const themeLabel = this.isDark() ? 'Clair' : 'Sombre';
 
     const tiles: Record<string, string> = {
-      'files-deposited-metric': this.metricHtml('files-deposited-val', 'Fichiers déposés', 'green', 'folder'),
+      'files-deposited-metric': this.metricHtml('files-deposited-val', 'Fichiers déposés', 'green', 'folder-closed'),
       'bcf-topics-metric': this.metricHtml('bcf-topics-val', 'Topics BCF', 'red', 'warning'),
-      'bcf-active-metric': this.metricHtml('bcf-active-val', 'BCF actifs', 'red', 'error'),
-      'bcf-resolved-metric': this.metricHtml('bcf-resolved-val', 'BCF résolus', 'green', 'check_circle'),
-      'bcf-inprogress-metric': this.metricHtml('bcf-inprogress-val', 'En cours', 'yellow', 'pending'),
-      'file-types-metric': this.metricHtml('file-types-val', 'Types de fichiers', 'orange', 'content_copy'),
-      'contributors-metric': this.metricHtml('contributors-val', 'Contributeurs', 'blue', 'people'),
-      'resolution-rate-metric': this.metricHtml('resolution-rate-val', 'Taux résolution', 'teal', 'bar_graph'),
+      'bcf-active-metric': this.metricHtml('bcf-active-val', 'BCF actifs', 'red', 'cancel-circle'),
+      'bcf-resolved-metric': this.metricHtml('bcf-resolved-val', 'BCF résolus', 'green', 'check-circle'),
+      'bcf-inprogress-metric': this.metricHtml('bcf-inprogress-val', 'En cours', 'yellow', 'clock'),
+      'file-types-metric': this.metricHtml('file-types-val', 'Types de fichiers', 'orange', 'copy-content'),
+      'contributors-metric': this.metricHtml('contributors-val', 'Contributeurs', 'blue', 'people-group'),
+      'resolution-rate-metric': this.metricHtml('resolution-rate-val', 'Taux résolution', 'teal', 'bar-graph'),
 
-      'cumulative-chart': `<div class="card"><div class="card-header"><h3>Fichiers déposés — évolution cumulatif</h3><span class="card-icon"><i class="modus-icon">line_graph</i></span></div><div class="card-content"><div class="chart-container chart-tall"><canvas id="cumulative-canvas"></canvas></div></div></div>`,
-      'deposit-freq-chart': `<div class="card"><div class="card-header"><h3>Fréquence de dépôt (26 dernières semaines)</h3><span class="card-icon"><i class="modus-icon">bar_graph</i></span></div><div class="card-content"><div class="chart-container chart-tall"><canvas id="deposit-freq-canvas"></canvas></div></div></div>`,
-      'bcf-status-donut': `<div class="card"><div class="card-header"><h3>BCF par statut</h3><span class="card-icon"><i class="modus-icon">pie_chart</i></span></div><div class="card-content"><div class="chart-container"><canvas id="bcf-status-donut-canvas"></canvas></div></div></div>`,
+      'cumulative-chart': `<div class="card"><div class="card-header"><h3>Fichiers déposés — évolution cumulatif</h3>${this.chartTypeSwitcher('cumulative', ['line', 'bar'])}</div><div class="card-content"><div class="chart-container chart-tall"><canvas id="cumulative-canvas"></canvas></div></div></div>`,
+      'deposit-freq-chart': `<div class="card"><div class="card-header"><h3>Fréquence de dépôt (26 dernières semaines)</h3>${this.chartTypeSwitcher('deposit-freq', ['bar', 'line'])}</div><div class="card-content"><div class="chart-container chart-tall"><canvas id="deposit-freq-canvas"></canvas></div></div></div>`,
+      'bcf-status-donut': `<div class="card"><div class="card-header"><h3>BCF par statut</h3>${this.chartTypeSwitcher('bcf-status', ['doughnut', 'bar', 'pie'])}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-status-donut-canvas"></canvas></div></div></div>`,
       'bcf-created-resolved': `<div class="card"><div class="card-header"><h3>BCF créés vs résolus dans le temps</h3><div class="chart-period-tabs"><button class="bcf-cr-period-btn active" data-period="7">7 sem.</button><button class="bcf-cr-period-btn" data-period="30">Tout</button></div></div><div class="card-content"><div class="chart-container"><canvas id="bcf-created-resolved-canvas"></canvas></div></div></div>`,
-      'bcf-priority-chart': `<div class="card"><div class="card-header"><h3>BCF par priorité</h3><span class="card-icon"><i class="modus-icon">pie_chart</i></span></div><div class="card-content"><div class="chart-container"><canvas id="bcf-priority-canvas"></canvas></div></div></div>`,
-      'bcf-assignee-chart': `<div class="card"><div class="card-header"><h3>BCF par personne assignée</h3><span class="card-icon"><i class="modus-icon">people</i></span></div><div class="card-content"><div id="bcf-assignee-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
-      'filetype-chart': `<div class="card"><div class="card-header"><h3>Fichiers par type</h3><span class="card-icon"><i class="modus-icon">pie_chart</i></span></div><div class="card-content"><div class="chart-container"><canvas id="filetype-canvas"></canvas></div></div></div>`,
-      'top-contributors': `<div class="card"><div class="card-header"><h3>Top contributeurs (fichiers déposés)</h3><span class="card-icon"><i class="modus-icon">people</i></span></div><div class="card-content"><div id="top-contributors-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+      'bcf-priority-chart': `<div class="card"><div class="card-header"><h3>BCF par priorité</h3>${this.chartTypeSwitcher('bcf-priority', ['doughnut', 'bar', 'pie'])}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-priority-canvas"></canvas></div></div></div>`,
+      'bcf-assignee-chart': `<div class="card"><div class="card-header"><h3>BCF par personne assignée</h3><span class="card-icon"><i class="modus-icon">people-group</i></span></div><div class="card-content"><div id="bcf-assignee-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+      'filetype-chart': `<div class="card"><div class="card-header"><h3>Fichiers par type</h3>${this.chartTypeSwitcher('filetype', ['pie', 'doughnut', 'bar'])}</div><div class="card-content"><div class="chart-container"><canvas id="filetype-canvas"></canvas></div></div></div>`,
+      'top-contributors': `<div class="card"><div class="card-header"><h3>Top contributeurs (fichiers déposés)</h3><span class="card-icon"><i class="modus-icon">people-group</i></span></div><div class="card-content"><div id="top-contributors-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'top-updated-files': `<div class="card"><div class="card-header"><h3>Top 20 — Fichiers les plus mis à jour (nouvelles versions)</h3><span class="card-icon"><i class="modus-icon">file_upload</i></span></div>
+      'top-updated-files': `<div class="card"><div class="card-header"><h3>Top 20 — Fichiers les plus mis à jour (nouvelles versions)</h3><span class="card-icon"><i class="modus-icon">upload</i></span></div>
         <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
           <thead><tr><th style="width:2rem">#</th><th>Nom</th><th style="width:8rem">Versions</th></tr></thead>
           <tbody id="top-updated-files-body"><tr><td colspan="3" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
@@ -891,19 +995,19 @@ export class Dashboard {
           <tbody id="oldest-bcf-body"><tr><td colspan="6" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
         </table></div></div></div>`,
 
-      'recent-files-table': `<div class="card"><div class="card-header"><h3>Fichiers récents</h3><span class="card-icon"><i class="modus-icon">folder_open</i></span></div>
+      'recent-files-table': `<div class="card"><div class="card-header"><h3>Fichiers récents</h3><span class="card-icon"><i class="modus-icon">folder-open</i></span></div>
         <div class="card-content" style="padding:0"><div id="recent-files-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'recent-bcf-table': `<div class="card"><div class="card-header"><h3>BCF récents</h3><span class="card-icon"><i class="modus-icon">assignment</i></span></div>
+      'recent-bcf-table': `<div class="card"><div class="card-header"><h3>BCF récents</h3><span class="card-icon"><i class="modus-icon">clipboard</i></span></div>
         <div class="card-content" style="padding:0"><div id="recent-bcf-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'team': `<div class="card"><div class="card-header"><h3>Équipe projet</h3><span class="card-icon"><i class="modus-icon">people</i></span></div>
+      'team': `<div class="card"><div class="card-header"><h3>Équipe projet</h3><span class="card-icon"><i class="modus-icon">people-group</i></span></div>
         <div class="card-content"><div id="team-list" class="team-list"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'timeline': `<div class="card"><div class="card-header"><h3>Activité récente</h3><span class="card-icon"><i class="modus-icon">schedule</i></span></div>
+      'timeline': `<div class="card"><div class="card-header"><h3>Activité récente</h3><span class="card-icon"><i class="modus-icon">clock</i></span></div>
         <div class="card-content"><div id="timeline" class="timeline"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
-      'views': `<div class="card"><div class="card-header"><h3>Vues 3D sauvegardées</h3><span class="card-icon"><i class="modus-icon">visibility</i></span></div>
+      'views': `<div class="card"><div class="card-header"><h3>Vues 3D sauvegardées</h3><span class="card-icon"><i class="modus-icon">visibility-on</i></span></div>
         <div class="card-content"><div id="views-grid" class="views-grid"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
     };
 
@@ -922,7 +1026,7 @@ export class Dashboard {
       const def = TILE_DEFS.find(d => d.id === id);
       const size = def ? def.size : 1;
       const hidden = this.tileConfig.hidden.includes(id) ? ' hidden-tile' : '';
-      return `<div class="tile${hidden}" data-tile-id="${id}" data-size="${size}"><div class="tile-drag-handle" title="Déplacer"><i class="modus-icon" style="font-size:10px">drag_indicator</i></div>${content}</div>`;
+      return `<div class="tile${hidden}" data-tile-id="${id}" data-size="${size}"><div class="tile-drag-handle" title="Déplacer"><i class="modus-icon" style="font-size:10px">drag-indicator</i></div>${content}</div>`;
     }).join('');
 
     const projectDisplay = this.projectName ? this.projectName : 'Projet Trimble Connect';

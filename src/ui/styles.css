@@ -483,6 +483,43 @@ body {
   color: white;
 }
 
+.chart-type-switcher {
+  display: flex;
+  gap: 2px;
+  background: var(--muted);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  margin-inline-start: auto;
+}
+
+.chart-type-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.chart-type-btn .modus-icon {
+  font-size: 14px;
+}
+
+.chart-type-btn:hover {
+  color: var(--foreground);
+  background: var(--card);
+}
+
+.chart-type-btn.active {
+  background: var(--trimble-primary);
+  color: white;
+}
+
 /* ============================================
    TABLE
    ============================================ */

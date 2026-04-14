@@ -63,6 +63,12 @@ export declare class Dashboard {
     stopAutoRefresh(): void;
     destroy(): void;
     exportPDF(): void;
+    private chartTypeState;
+    private chartTypeSwitcher;
+    private attachChartTypeSwitchers;
+    private rerenderChart;
+    private getCumulativeData;
+    private getDepositFreqData;
     private getTemplate;
     private metricHtml;
 }

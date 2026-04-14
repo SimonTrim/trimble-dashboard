@@ -120,7 +120,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating BCF chart', { error }); }
   }
 
-  createBCFPriorityChart(canvasId: string, data: BCFPriorityData): void {
+  createBCFPriorityChart(canvasId: string, data: BCFPriorityData, chartType: string = 'doughnut'): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -129,23 +129,26 @@ export class ChartsManager {
       if (!ctx) return;
       const total = data.high + data.medium + data.low;
       const tc = themeColors();
+      const labels = ['Haute', 'Moyenne', 'Basse'];
+      const values = [data.high, data.medium, data.low];
+      const colors = [COLORS.danger, COLORS.warning, COLORS.success];
+      const pctCallback = (ctx: any) => { const v = ctx.parsed || ctx.parsed.y; const pct = total > 0 ? Math.round(((typeof v === 'number' ? v : ctx.parsed) / total) * 100) : 0; return ` ${ctx.label}: ${typeof v === 'number' ? v : ctx.parsed} (${pct}%)`; };
 
-      const chart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: ['Haute', 'Moyenne', 'Basse'],
-          datasets: [{ data: [data.high, data.medium, data.low], backgroundColor: [COLORS.danger, COLORS.warning, COLORS.success], borderWidth: 0, spacing: 3 }],
-        },
-        options: {
-          ...getBaseOpts(), cutout: '68%',
-          plugins: {
-            ...getBaseOpts().plugins,
-            legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } },
-            tooltip: { ...getTooltipStyle(), callbacks: { label: (ctx: any) => { const v = ctx.parsed; const pct = total > 0 ? Math.round((v / total) * 100) : 0; return ` ${ctx.label}: ${v} (${pct}%)`; } } },
-          },
-        },
-      });
-      this.setChart('bcfPriority', chart);
+      if (chartType === 'bar') {
+        const chart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Topics', data: values, backgroundColor: colors, borderRadius: 8, borderSkipped: false, barPercentage: 0.55 }] },
+          options: { ...getBaseOpts(), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+        });
+        this.setChart('bcfPriority', chart);
+      } else {
+        const chart = new Chart(ctx, {
+          type: chartType as any,
+          data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
+          options: { ...getBaseOpts(), cutout: chartType === 'doughnut' ? '68%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+        });
+        this.setChart('bcfPriority', chart);
+      }
     } catch (error) { logger.error('Error creating BCF priority chart', { error }); }
   }
 
@@ -206,7 +209,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating files trend chart', { error }); }
   }
 
-  createFileTypeChart(canvasId: string, byExtension: Record<string, number>): void {
+  createFileTypeChart(canvasId: string, byExtension: Record<string, number>, chartType: string = 'pie'): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -225,24 +228,27 @@ export class ChartsManager {
 
       if (otherCount > 0) { labels.push('Autres'); counts.push(otherCount); colors.push(DEFAULT_FILE_COLOR); }
       const total = counts.reduce((s, c) => s + c, 0);
+      const pctCallback = (ctx: any) => { const v = ctx.parsed || ctx.parsed.y; const pct = total > 0 ? Math.round(((typeof v === 'number' ? v : ctx.parsed) / total) * 100) : 0; return ` ${ctx.label}: ${typeof v === 'number' ? v : ctx.parsed} (${pct}%)`; };
 
-      const chart = new Chart(ctx, {
-        type: 'pie',
-        data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0, spacing: 2 }] },
-        options: {
-          ...getBaseOpts(),
-          plugins: {
-            ...getBaseOpts().plugins,
-            legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } },
-            tooltip: { ...getTooltipStyle(), callbacks: { label: (ctx: any) => { const v = ctx.parsed; const pct = total > 0 ? Math.round((v / total) * 100) : 0; return ` ${ctx.label}: ${v} (${pct}%)`; } } },
-          },
-        },
-      });
-      this.setChart('fileType', chart);
+      if (chartType === 'bar') {
+        const chart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Fichiers', data: counts, backgroundColor: colors, borderRadius: 6, borderSkipped: false, barPercentage: 0.6 }] },
+          options: { ...getBaseOpts(), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 10 }, maxRotation: 45 }, grid: { display: false }, border: { display: false } } } },
+        });
+        this.setChart('fileType', chart);
+      } else {
+        const chart = new Chart(ctx, {
+          type: chartType as any,
+          data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0, spacing: 2 }] },
+          options: { ...getBaseOpts(), cutout: chartType === 'doughnut' ? '60%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+        });
+        this.setChart('fileType', chart);
+      }
     } catch (error) { logger.error('Error creating file type chart', { error }); }
   }
 
-  createCumulativeChart(canvasId: string, data: { label: string; cumulative: number }[]): void {
+  createCumulativeChart(canvasId: string, data: { label: string; cumulative: number }[], chartType: string = 'line'): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -261,32 +267,38 @@ export class ChartsManager {
       }
       const lineColor = isDark() ? '#0ea5e9' : '#0063a3';
 
+      const dataset = chartType === 'bar' ? {
+        label: 'Total cumulé',
+        data: data.map(d => d.cumulative),
+        backgroundColor: lineColor,
+        borderRadius: 4,
+        borderSkipped: false,
+        barPercentage: 0.6,
+      } : {
+        label: 'Total cumulé',
+        data: data.map(d => d.cumulative),
+        borderColor: lineColor,
+        backgroundColor: gradient,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4,
+        pointBackgroundColor: lineColor,
+        pointBorderColor: isDark() ? '#111827' : '#ffffff',
+        pointBorderWidth: 2,
+        pointHoverRadius: 6,
+      };
+
       const chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: data.map(d => d.label),
-          datasets: [{
-            label: 'Total cumulé',
-            data: data.map(d => d.cumulative),
-            borderColor: lineColor,
-            backgroundColor: gradient,
-            borderWidth: 2.5,
-            fill: true,
-            tension: 0.3,
-            pointRadius: 4,
-            pointBackgroundColor: lineColor,
-            pointBorderColor: isDark() ? '#111827' : '#ffffff',
-            pointBorderWidth: 2,
-            pointHoverRadius: 6,
-          }],
-        },
+        type: chartType as any,
+        data: { labels: data.map(d => d.label), datasets: [dataset as any] },
         options: {
           ...getBaseOpts(),
           interaction: { mode: 'index', intersect: false },
           plugins: {
             ...getBaseOpts().plugins,
             legend: { display: false },
-            tooltip: { ...getTooltipStyle(), callbacks: { label: (context) => ` Total cumulé : ${context.parsed.y}` } },
+            tooltip: { ...getTooltipStyle(), callbacks: { label: (context: any) => ` Total cumulé : ${context.parsed.y}` } },
           },
           scales: {
             y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } },
@@ -298,7 +310,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating cumulative chart', { error }); }
   }
 
-  createDepositFrequencyChart(canvasId: string, data: { label: string; count: number }[]): void {
+  createDepositFrequencyChart(canvasId: string, data: { label: string; count: number }[], chartType: string = 'bar'): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -307,19 +319,29 @@ export class ChartsManager {
       if (!ctx) return;
       const tc = themeColors();
 
+      const lineColor = isDark() ? '#10b981' : '#059669';
+      const dataset = chartType === 'line' ? {
+        label: 'Fichiers déposés',
+        data: data.map(d => d.count),
+        borderColor: lineColor,
+        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointBackgroundColor: lineColor,
+      } : {
+        label: 'Fichiers déposés',
+        data: data.map(d => d.count),
+        backgroundColor: COLORS.success,
+        borderRadius: 4,
+        borderSkipped: false,
+        barPercentage: 0.6,
+      };
+
       const chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: data.map(d => d.label),
-          datasets: [{
-            label: 'Fichiers déposés',
-            data: data.map(d => d.count),
-            backgroundColor: COLORS.success,
-            borderRadius: 4,
-            borderSkipped: false,
-            barPercentage: 0.6,
-          }],
-        },
+        type: chartType as any,
+        data: { labels: data.map(d => d.label), datasets: [dataset as any] },
         options: {
           ...getBaseOpts(),
           plugins: { ...getBaseOpts().plugins, legend: { display: false } },
@@ -386,7 +408,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating BCF created/resolved chart', { error }); }
   }
 
-  createBCFStatusDonutChart(canvasId: string, data: BCFStatusData): void {
+  createBCFStatusDonutChart(canvasId: string, data: BCFStatusData, chartType: string = 'doughnut'): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -395,23 +417,26 @@ export class ChartsManager {
       if (!ctx) return;
       const tc = themeColors();
       const total = data.open + data.inProgress + data.resolved + data.closed;
+      const labels = ['Closed', 'New', 'Waiting', 'En cours'];
+      const values = [data.closed, data.open, data.resolved, data.inProgress];
+      const colors = [COLORS.success, COLORS.blue, COLORS.warning, COLORS.accent];
+      const pctCallback = (ctx: any) => { const v = ctx.parsed || ctx.parsed.y; const pct = total > 0 ? Math.round(((typeof v === 'number' ? v : ctx.parsed) / total) * 100) : 0; return ` ${ctx.label}: ${typeof v === 'number' ? v : ctx.parsed} (${pct}%)`; };
 
-      const chart = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: ['Closed', 'New', 'Waiting', 'en cours'],
-          datasets: [{ data: [data.closed, data.open, data.resolved, data.inProgress], backgroundColor: [COLORS.success, COLORS.blue, COLORS.warning, COLORS.accent], borderWidth: 0, spacing: 3 }],
-        },
-        options: {
-          ...getBaseOpts(), cutout: '65%',
-          plugins: {
-            ...getBaseOpts().plugins,
-            legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } },
-            tooltip: { ...getTooltipStyle(), callbacks: { label: (ctx: any) => { const v = ctx.parsed; const pct = total > 0 ? Math.round((v / total) * 100) : 0; return ` ${ctx.label}: ${v} (${pct}%)`; } } },
-          },
-        },
-      });
-      this.setChart('bcfStatusDonut', chart);
+      if (chartType === 'bar') {
+        const chart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Topics', data: values, backgroundColor: colors, borderRadius: 8, borderSkipped: false, barPercentage: 0.55 }] },
+          options: { ...getBaseOpts(), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+        });
+        this.setChart('bcfStatusDonut', chart);
+      } else {
+        const chart = new Chart(ctx, {
+          type: chartType as any,
+          data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
+          options: { ...getBaseOpts(), cutout: chartType === 'doughnut' ? '65%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+        });
+        this.setChart('bcfStatusDonut', chart);
+      }
     } catch (error) { logger.error('Error creating BCF status donut chart', { error }); }
   }
 
