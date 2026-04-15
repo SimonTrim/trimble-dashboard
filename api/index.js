@@ -642,21 +642,61 @@ app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => 
 /**
  * GET /api/projects/:projectId/views/:viewId/thumbnail
  * Proxy for view thumbnails (requires auth, so we proxy through backend)
+ *
+ * Strategy:
+ * 1. Fetch the view object from the Trimble API to get the real thumbnail URL
+ * 2. If the view has a thumbnail URL, fetch it with auth and stream it back
+ * 3. Fallback: try common endpoint patterns
  */
 app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (req, res) => {
   try {
     const { projectId, viewId } = req.params;
     const baseUrl = getBaseUrl(req.region);
-    
-    // Try multiple thumbnail endpoint formats (projectId query param is required by Trimble API)
-    const urls = [
+
+    // Step 1: Fetch the view object to discover the actual thumbnail URL
+    const viewUrl = `${baseUrl}/views/${viewId}?projectId=${projectId}`;
+    console.log(`🖼️ Fetching view details: ${viewUrl}`);
+
+    let thumbnailUrlFromView = null;
+    try {
+      const viewResp = await fetch(viewUrl, {
+        headers: {
+          'Authorization': `Bearer ${req.accessToken}`,
+          'Accept': 'application/json',
+        }
+      });
+      if (viewResp.ok) {
+        const viewData = await viewResp.json();
+        thumbnailUrlFromView = viewData.thumbnail || viewData.thumbnailUrl || null;
+        console.log(`📋 View ${viewId}: thumbnail field = ${thumbnailUrlFromView}, keys = [${Object.keys(viewData).join(', ')}]`);
+      } else {
+        console.log(`⚠️ View details response: ${viewResp.status}`);
+      }
+    } catch (e) {
+      console.log(`⚠️ View details fetch error: ${e.message}`);
+    }
+
+    // Step 2: Build candidate URLs (real URL first, then fallback patterns)
+    const urls = [];
+    if (thumbnailUrlFromView) {
+      if (thumbnailUrlFromView.startsWith('/')) {
+        const host = REGIONAL_HOSTS[req.region] || REGIONAL_HOSTS['eu'];
+        urls.push(`https://${host}${thumbnailUrlFromView}`);
+      } else if (thumbnailUrlFromView.startsWith('http')) {
+        urls.push(thumbnailUrlFromView);
+      } else {
+        urls.push(`${baseUrl}/${thumbnailUrlFromView}`);
+      }
+    }
+    urls.push(
       `${baseUrl}/views/${viewId}/thumbnail?projectId=${projectId}`,
       `${baseUrl}/views/${viewId}/thumbnail2d?projectId=${projectId}`,
-    ];
-    
+    );
+
+    // Step 3: Try each URL until one works
     for (const thumbnailUrl of urls) {
       console.log(`🖼️ Trying thumbnail: ${thumbnailUrl}`);
-      
+
       try {
         const response = await fetch(thumbnailUrl, {
           headers: {
@@ -669,7 +709,7 @@ app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (
           const contentType = response.headers.get('content-type') || 'image/png';
           const arrayBuffer = await response.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
-          
+
           if (buffer.length > 0) {
             console.log(`✅ Thumbnail found for view ${viewId} (${buffer.length} bytes)`);
             res.set('Content-Type', contentType);
@@ -682,7 +722,7 @@ app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (
         console.log(`⚠️ Thumbnail fetch error: ${e.message}`);
       }
     }
-    
+
     return res.status(404).send('Thumbnail not found');
   } catch (error) {
     console.error('❌ Thumbnail error:', error.message);
@@ -758,7 +798,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    version: '5.2.0',
+    version: '5.3.0',
     environment: ENVIRONMENT,
     activeSessions: tokenStore.size
   });
@@ -767,7 +807,7 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '5.2.0',
+    version: '5.3.0',
     environment: ENVIRONMENT,
     deployed: new Date().toISOString(),
     note: 'Fixed BCF topics: uses openXX.connect.trimble.com servers (from Swagger docs)',

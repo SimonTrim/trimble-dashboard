@@ -32,6 +32,10 @@ interface TrimbleWorkspaceAPI {
   extension: {
     requestPermission: (permission: 'accesstoken') => Promise<string>;
   };
+  view?: {
+    getViews: () => Promise<any[]>;
+    getView: (viewId: string) => Promise<any>;
+  };
 }
 
 /**
@@ -336,31 +340,70 @@ export class WorkspaceAPIAdapter {
   }
 
   /**
-   * API des vues - Utilise REST API Core
-   * Endpoint: GET /projects/{projectId}/views
+   * API des vues - Tries Workspace API first (provides imageData/thumbnail), falls back to REST API
    */
   get views() {
+    // Cache to store imageData/thumbnail from view objects for later use by getThumbnail
+    const viewImageCache = new Map<string, string>();
+
     return {
       getAll: async (): Promise<ProjectView[]> => {
+        // Try Workspace API first (returns ViewSpec with imageData/thumbnail)
+        if (this.workspaceAPI.view) {
+          try {
+            logger.info('👁️ Fetching views via Workspace API view.getViews()...');
+            const wsViews = await this.workspaceAPI.view.getViews();
+
+            const views: ProjectView[] = wsViews.map((view: any) => {
+              // Cache imageData or thumbnail for later getThumbnail calls
+              if (view.imageData) {
+                viewImageCache.set(view.id, view.imageData);
+              } else if (view.thumbnail) {
+                viewImageCache.set(view.id, view.thumbnail);
+              }
+
+              let createdBy = 'Unknown';
+              if (view.createdBy) {
+                createdBy = typeof view.createdBy === 'string'
+                  ? view.createdBy
+                  : (view.createdBy.name || [view.createdBy.firstName, view.createdBy.lastName].filter(Boolean).join(' ') || view.createdBy.email || 'Unknown');
+              }
+
+              return {
+                id: view.id,
+                name: view.name || 'Sans nom',
+                description: view.description || undefined,
+                createdBy,
+                createdAt: new Date(view.createdOn || view.modifiedOn || new Date()),
+                thumbnail: view.imageData || view.thumbnail || view.thumbnailUrl || undefined,
+                isDefault: view.isDefault || false,
+              };
+            });
+
+            logger.info(`✅ Retrieved ${views.length} views via Workspace API (${viewImageCache.size} with thumbnails)`);
+            return views;
+          } catch (wsError) {
+            logger.warn('Workspace API view.getViews() failed, falling back to REST API', { wsError });
+          }
+        }
+
+        // Fallback: REST API
         try {
           logger.info('👁️ Fetching views via REST API /projects/{projectId}/views...');
-          
           const response = await this.fetchAPI<any[]>(`/projects/${this.projectId}/views`);
-          
-          // Transformer en notre format ProjectView
+
           const views: ProjectView[] = response.map((view: any) => {
+            if (view.thumbnail || view.thumbnailUrl) {
+              viewImageCache.set(view.id, view.thumbnail || view.thumbnailUrl);
+            }
+
             let createdBy = 'Unknown';
             if (view.createdBy) {
-              if (typeof view.createdBy === 'string') {
-                createdBy = view.createdBy;
-              } else {
-                createdBy = view.createdBy.name
-                  || [view.createdBy.firstName, view.createdBy.lastName].filter(Boolean).join(' ')
-                  || view.createdBy.email
-                  || 'Unknown';
-              }
+              createdBy = typeof view.createdBy === 'string'
+                ? view.createdBy
+                : (view.createdBy.name || [view.createdBy.firstName, view.createdBy.lastName].filter(Boolean).join(' ') || view.createdBy.email || 'Unknown');
             }
-            
+
             return {
               id: view.id,
               name: view.name || 'Sans nom',
@@ -382,10 +425,8 @@ export class WorkspaceAPIAdapter {
 
       get: async (id: string): Promise<ProjectView | null> => {
         try {
-          // Récupérer toutes les vues et filtrer par ID
           const allViews = await this.views.getAll();
-          const view = allViews.find(v => v.id === id);
-          return view || null;
+          return allViews.find(v => v.id === id) || null;
         } catch (error) {
           logger.error(`Failed to fetch view ${id}`, { error });
           return null;
@@ -394,9 +435,35 @@ export class WorkspaceAPIAdapter {
 
       getThumbnail: async (viewId: string): Promise<string | null> => {
         try {
+          // Check cache first: imageData (base64 data URL) can be used directly
+          const cached = viewImageCache.get(viewId);
+          if (cached) {
+            if (cached.startsWith('data:')) {
+              logger.info(`✅ Using cached base64 imageData for view ${viewId}`);
+              return cached;
+            }
+            // If it's a full HTTP URL, try fetching it directly with auth
+            if (cached.startsWith('http')) {
+              logger.info(`🔗 Trying cached thumbnail URL for view ${viewId}: ${cached}`);
+              try {
+                const token = await this.getAccessToken();
+                const resp = await fetch(cached, {
+                  headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (resp.ok) {
+                  const blob = await resp.blob();
+                  if (blob.size > 0) return URL.createObjectURL(blob);
+                }
+              } catch (e) {
+                logger.warn(`Direct thumbnail URL fetch failed for ${viewId}`, { e });
+              }
+            }
+          }
+
+          // Fallback: use the backend proxy
           const token = await this.getAccessToken();
           const url = `${this.backendUrl}/api/projects/${this.projectId}/views/${viewId}/thumbnail`;
-          
+
           const response = await fetch(url, {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -405,9 +472,9 @@ export class WorkspaceAPIAdapter {
           });
 
           if (!response.ok) return null;
-          
+
           const blob = await response.blob();
-          return URL.createObjectURL(blob);
+          return blob.size > 0 ? URL.createObjectURL(blob) : null;
         } catch (error) {
           logger.error(`Failed to fetch thumbnail for view ${viewId}`, { error });
           return null;

@@ -26,6 +26,10 @@ interface WorkspaceAPIInstance {
   extension: {
     requestPermission: (permission: 'accesstoken') => Promise<string>;
   };
+  view?: {
+    getViews: () => Promise<any[]>;
+    getView: (viewId: string) => Promise<any>;
+  };
 }
 
 let workspaceAPI: WorkspaceAPIInstance | null = null;

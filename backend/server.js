@@ -458,33 +458,80 @@ app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
 /**
  * GET /api/projects/:projectId/views/:viewId/thumbnail
  * Récupère la vignette d'une vue via l'API v2.0
- * Endpoint Trimble: GET /tc/api/2.0/views/{viewId}/thumbnail?projectId={projectId}
+ *
+ * Strategy: fetch view details first to discover the real thumbnail URL,
+ * then fall back to common endpoint patterns.
  */
 app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (req, res) => {
   try {
     const { projectId, viewId } = req.params;
     const apiBase = TRIMBLE_API_BASE[req.region];
-    const apiUrl = `${apiBase}/2.0/views/${viewId}/thumbnail?projectId=${projectId}`;
-    
-    console.log(`📡 Calling Trimble Thumbnail API: ${apiUrl}`);
-    
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Authorization': `Bearer ${req.accessToken}`,
-      }
-    });
 
-    if (!response.ok) {
-      console.warn(`⚠️ Thumbnail not available for view ${viewId}: ${response.status}`);
-      return res.status(response.status).json({ error: 'Thumbnail not available' });
+    // Step 1: Fetch view details to get the real thumbnail URL
+    const viewUrl = `${apiBase}/2.0/views/${viewId}?projectId=${projectId}`;
+    console.log(`🖼️ Fetching view details: ${viewUrl}`);
+
+    let thumbnailUrlFromView = null;
+    try {
+      const viewResp = await fetch(viewUrl, {
+        headers: {
+          'Authorization': `Bearer ${req.accessToken}`,
+          'Accept': 'application/json',
+        }
+      });
+      if (viewResp.ok) {
+        const viewData = await viewResp.json();
+        thumbnailUrlFromView = viewData.thumbnail || viewData.thumbnailUrl || null;
+        console.log(`📋 View ${viewId}: thumbnail field = ${thumbnailUrlFromView}`);
+      }
+    } catch (e) {
+      console.log(`⚠️ View details fetch error: ${e.message}`);
     }
 
-    const contentType = response.headers.get('content-type') || 'image/png';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    // Build candidate URLs
+    const urls = [];
+    if (thumbnailUrlFromView) {
+      if (thumbnailUrlFromView.startsWith('http')) {
+        urls.push(thumbnailUrlFromView);
+      } else if (thumbnailUrlFromView.startsWith('/')) {
+        const host = apiBase.replace(/\/tc\/api$/, '');
+        urls.push(`${host}${thumbnailUrlFromView}`);
+      } else {
+        urls.push(`${apiBase}/2.0/${thumbnailUrlFromView}`);
+      }
+    }
+    urls.push(
+      `${apiBase}/2.0/views/${viewId}/thumbnail?projectId=${projectId}`,
+      `${apiBase}/2.0/views/${viewId}/thumbnail2d?projectId=${projectId}`,
+    );
 
-    const buffer = await response.buffer();
-    res.send(buffer);
+    for (const thumbnailUrl of urls) {
+      console.log(`🖼️ Trying thumbnail: ${thumbnailUrl}`);
+      try {
+        const response = await fetch(thumbnailUrl, {
+          headers: {
+            'Authorization': `Bearer ${req.accessToken}`,
+            'Accept': 'image/png, image/jpeg, image/*',
+          }
+        });
+
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || 'image/png';
+          const buffer = await response.buffer();
+          if (buffer.length > 0) {
+            console.log(`✅ Thumbnail found for view ${viewId} (${buffer.length} bytes)`);
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            return res.send(buffer);
+          }
+        }
+        console.log(`⚠️ Thumbnail ${thumbnailUrl}: ${response.status}`);
+      } catch (e) {
+        console.log(`⚠️ Thumbnail fetch error: ${e.message}`);
+      }
+    }
+
+    return res.status(404).json({ error: 'Thumbnail not available' });
   } catch (error) {
     console.error('❌ Thumbnail API error:', error.message);
     res.status(500).json({ error: error.message });

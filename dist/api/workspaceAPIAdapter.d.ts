@@ -28,6 +28,10 @@ interface TrimbleWorkspaceAPI {
     extension: {
         requestPermission: (permission: 'accesstoken') => Promise<string>;
     };
+    view?: {
+        getViews: () => Promise<any[]>;
+        getView: (viewId: string) => Promise<any>;
+    };
 }
 /**
  * Adaptateur qui convertit le WorkspaceAPI en notre interface API
@@ -84,8 +88,7 @@ export declare class WorkspaceAPIAdapter {
         getTopics: () => Promise<BCFTopic[]>;
     };
     /**
-     * API des vues - Utilise REST API Core
-     * Endpoint: GET /projects/{projectId}/views
+     * API des vues - Tries Workspace API first (provides imageData/thumbnail), falls back to REST API
      */
     get views(): {
         getAll: () => Promise<ProjectView[]>;
