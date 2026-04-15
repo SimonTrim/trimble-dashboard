@@ -459,59 +459,73 @@ app.get('/api/projects/:projectId/views', requireAuth, async (req, res) => {
  * GET /api/projects/:projectId/views/:viewId/thumbnail
  * Récupère la vignette d'une vue via l'API v2.0
  *
- * Strategy: fetch view details first to discover the real thumbnail URL,
- * then fall back to common endpoint patterns.
+ * Strategy:
+ * 1. Fetch the view details and reuse the official `thumbnail` / `image` URLs
+ * 2. Fallback to the documented `/views/{viewId}/image` endpoint
+ * 3. Finally try the legacy `tc/app/files/thumb` representation URL pattern
  */
 app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (req, res) => {
   try {
     const { projectId, viewId } = req.params;
     const apiBase = TRIMBLE_API_BASE[req.region];
 
-    // Step 1: Fetch view details to get the real thumbnail URL
-    const viewUrl = `${apiBase}/2.0/views/${viewId}?projectId=${projectId}`;
-    console.log(`🖼️ Fetching view details: ${viewUrl}`);
+    const baseUrl = `${apiBase}/2.0`;
+    const baseOrigin = apiBase.replace(/\/tc\/api$/, '');
+    const normalizeAssetUrl = (value) => {
+      if (!value || typeof value !== 'string') return null;
+      if (value.startsWith('http://') || value.startsWith('https://')) return value;
+      if (value.startsWith('/')) return `${baseOrigin}${value}`;
+      return `${baseUrl}/${value.replace(/^\/+/, '')}`;
+    };
 
-    let thumbnailUrlFromView = null;
-    try {
-      const viewResp = await fetch(viewUrl, {
-        headers: {
-          'Authorization': `Bearer ${req.accessToken}`,
-          'Accept': 'application/json',
+    const candidateUrls = [];
+    const pushCandidate = (value) => {
+      const normalized = normalizeAssetUrl(value);
+      if (normalized && !candidateUrls.includes(normalized)) {
+        candidateUrls.push(normalized);
+      }
+    };
+
+    const viewDetailUrls = [
+      `${baseUrl}/views/${viewId}`,
+      `${baseUrl}/views/${viewId}?projectId=${projectId}`,
+    ];
+
+    for (const viewUrl of viewDetailUrls) {
+      console.log(`🖼️ Fetching view details: ${viewUrl}`);
+      try {
+        const viewResp = await fetch(viewUrl, {
+          headers: {
+            'Authorization': `Bearer ${req.accessToken}`,
+            'Accept': 'application/json',
+          }
+        });
+        if (!viewResp.ok) {
+          console.log(`⚠️ View details response (${viewUrl}): ${viewResp.status}`);
+          continue;
         }
-      });
-      if (viewResp.ok) {
+
         const viewData = await viewResp.json();
-        thumbnailUrlFromView = viewData.thumbnail || viewData.thumbnailUrl || null;
-        console.log(`📋 View ${viewId}: thumbnail field = ${thumbnailUrlFromView}`);
-      }
-    } catch (e) {
-      console.log(`⚠️ View details fetch error: ${e.message}`);
-    }
-
-    // Build candidate URLs
-    const urls = [];
-    if (thumbnailUrlFromView) {
-      if (thumbnailUrlFromView.startsWith('http')) {
-        urls.push(thumbnailUrlFromView);
-      } else if (thumbnailUrlFromView.startsWith('/')) {
-        const host = apiBase.replace(/\/tc\/api$/, '');
-        urls.push(`${host}${thumbnailUrlFromView}`);
-      } else {
-        urls.push(`${apiBase}/2.0/${thumbnailUrlFromView}`);
+        console.log(`📋 View ${viewId}: thumbnail=${viewData.thumbnail || null}, image=${viewData.image || null}`);
+        pushCandidate(viewData.thumbnail);
+        pushCandidate(viewData.thumbnailUrl);
+        pushCandidate(viewData.image);
+        break;
+      } catch (e) {
+        console.log(`⚠️ View details fetch error (${viewUrl}): ${e.message}`);
       }
     }
-    urls.push(
-      `${apiBase}/2.0/views/${viewId}/thumbnail?projectId=${projectId}`,
-      `${apiBase}/2.0/views/${viewId}/thumbnail2d?projectId=${projectId}`,
-    );
 
-    for (const thumbnailUrl of urls) {
+    pushCandidate(`${baseUrl}/views/${viewId}/image`);
+    pushCandidate(`${baseOrigin}/tc/app/files/thumb?id=${viewId}&fc=REPRESENTATION&projectId=${projectId}`);
+
+    for (const thumbnailUrl of candidateUrls) {
       console.log(`🖼️ Trying thumbnail: ${thumbnailUrl}`);
       try {
         const response = await fetch(thumbnailUrl, {
           headers: {
             'Authorization': `Bearer ${req.accessToken}`,
-            'Accept': 'image/png, image/jpeg, image/*',
+            'Accept': 'image/png, image/jpeg, image/webp, image/*, */*',
           }
         });
 

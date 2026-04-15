@@ -644,64 +644,76 @@ app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => 
  * Proxy for view thumbnails (requires auth, so we proxy through backend)
  *
  * Strategy:
- * 1. Fetch the view object from the Trimble API to get the real thumbnail URL
- * 2. If the view has a thumbnail URL, fetch it with auth and stream it back
- * 3. Fallback: try common endpoint patterns
+ * 1. Fetch the view details and reuse the official `thumbnail` / `image` URLs
+ * 2. Fallback to the documented `/views/{viewId}/image` endpoint
+ * 3. Finally try the legacy `tc/app/files/thumb` representation URL pattern
  */
 app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (req, res) => {
   try {
     const { projectId, viewId } = req.params;
     const baseUrl = getBaseUrl(req.region);
 
-    // Step 1: Fetch the view object to discover the actual thumbnail URL
-    const viewUrl = `${baseUrl}/views/${viewId}?projectId=${projectId}`;
-    console.log(`🖼️ Fetching view details: ${viewUrl}`);
+    const baseOrigin = baseUrl.replace(/\/tc\/api\/2\.0$/, '');
+    const normalizeAssetUrl = (value) => {
+      if (!value || typeof value !== 'string') return null;
+      if (value.startsWith('http://') || value.startsWith('https://')) return value;
+      if (value.startsWith('/')) return `${baseOrigin}${value}`;
+      return `${baseUrl}/${value.replace(/^\/+/, '')}`;
+    };
 
-    let thumbnailUrlFromView = null;
-    try {
-      const viewResp = await fetch(viewUrl, {
-        headers: {
-          'Authorization': `Bearer ${req.accessToken}`,
-          'Accept': 'application/json',
+    const candidateUrls = [];
+    const pushCandidate = (value) => {
+      const normalized = normalizeAssetUrl(value);
+      if (normalized && !candidateUrls.includes(normalized)) {
+        candidateUrls.push(normalized);
+      }
+    };
+
+    // Step 1: fetch the view details using the documented endpoint
+    const viewDetailUrls = [
+      `${baseUrl}/views/${viewId}`,
+      `${baseUrl}/views/${viewId}?projectId=${projectId}`,
+    ];
+
+    for (const viewUrl of viewDetailUrls) {
+      console.log(`🖼️ Fetching view details: ${viewUrl}`);
+      try {
+        const viewResp = await fetch(viewUrl, {
+          headers: {
+            'Authorization': `Bearer ${req.accessToken}`,
+            'Accept': 'application/json',
+          }
+        });
+
+        if (!viewResp.ok) {
+          console.log(`⚠️ View details response (${viewUrl}): ${viewResp.status}`);
+          continue;
         }
-      });
-      if (viewResp.ok) {
+
         const viewData = await viewResp.json();
-        thumbnailUrlFromView = viewData.thumbnail || viewData.thumbnailUrl || null;
-        console.log(`📋 View ${viewId}: thumbnail field = ${thumbnailUrlFromView}, keys = [${Object.keys(viewData).join(', ')}]`);
-      } else {
-        console.log(`⚠️ View details response: ${viewResp.status}`);
+        console.log(`📋 View ${viewId}: thumbnail=${viewData.thumbnail || null}, image=${viewData.image || null}`);
+        pushCandidate(viewData.thumbnail);
+        pushCandidate(viewData.thumbnailUrl);
+        pushCandidate(viewData.image);
+        break;
+      } catch (e) {
+        console.log(`⚠️ View details fetch error (${viewUrl}): ${e.message}`);
       }
-    } catch (e) {
-      console.log(`⚠️ View details fetch error: ${e.message}`);
     }
 
-    // Step 2: Build candidate URLs (real URL first, then fallback patterns)
-    const urls = [];
-    if (thumbnailUrlFromView) {
-      if (thumbnailUrlFromView.startsWith('/')) {
-        const host = REGIONAL_HOSTS[req.region] || REGIONAL_HOSTS['eu'];
-        urls.push(`https://${host}${thumbnailUrlFromView}`);
-      } else if (thumbnailUrlFromView.startsWith('http')) {
-        urls.push(thumbnailUrlFromView);
-      } else {
-        urls.push(`${baseUrl}/${thumbnailUrlFromView}`);
-      }
-    }
-    urls.push(
-      `${baseUrl}/views/${viewId}/thumbnail?projectId=${projectId}`,
-      `${baseUrl}/views/${viewId}/thumbnail2d?projectId=${projectId}`,
-    );
+    // Step 2: try the documented image endpoint, then the legacy representation URL
+    pushCandidate(`${baseUrl}/views/${viewId}/image`);
+    pushCandidate(`${baseOrigin}/tc/app/files/thumb?id=${viewId}&fc=REPRESENTATION&projectId=${projectId}`);
 
     // Step 3: Try each URL until one works
-    for (const thumbnailUrl of urls) {
+    for (const thumbnailUrl of candidateUrls) {
       console.log(`🖼️ Trying thumbnail: ${thumbnailUrl}`);
 
       try {
         const response = await fetch(thumbnailUrl, {
           headers: {
             'Authorization': `Bearer ${req.accessToken}`,
-            'Accept': 'image/png, image/jpeg, image/*',
+            'Accept': 'image/png, image/jpeg, image/webp, image/*, */*',
           }
         });
 
