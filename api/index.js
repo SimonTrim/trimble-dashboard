@@ -645,13 +645,13 @@ app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => 
  */
 app.get('/api/projects/:projectId/views/:viewId/thumbnail', requireAuth, async (req, res) => {
   try {
-    const { viewId } = req.params;
+    const { projectId, viewId } = req.params;
     const baseUrl = getBaseUrl(req.region);
     
-    // Try multiple thumbnail endpoint formats
+    // Try multiple thumbnail endpoint formats (projectId query param is required by Trimble API)
     const urls = [
-      `${baseUrl}/views/${viewId}/thumbnail`,
-      `${baseUrl}/views/${viewId}/thumbnail2d`,
+      `${baseUrl}/views/${viewId}/thumbnail?projectId=${projectId}`,
+      `${baseUrl}/views/${viewId}/thumbnail2d?projectId=${projectId}`,
     ];
     
     for (const thumbnailUrl of urls) {

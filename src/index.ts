@@ -32,6 +32,7 @@ let workspaceAPI: WorkspaceAPIInstance | null = null;
 let dashboard: Dashboard | null = null;
 let isStandaloneMode = false;
 let isInitialized = false;
+let menuCreated = false;
 
 /**
  * Détecter si nous sommes en mode standalone (lien direct) ou intégré (iframe Trimble Connect)
@@ -170,6 +171,11 @@ function createSidebarMenu(): void {
     return;
   }
 
+  if (menuCreated) {
+    logger.debug('Sidebar menu already created, skipping');
+    return;
+  }
+
   const mainMenuObject = {
     title: 'Dashboard',
     icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png',
@@ -177,6 +183,7 @@ function createSidebarMenu(): void {
   };
 
   workspaceAPI.ui.setMenu(mainMenuObject);
+  menuCreated = true;
   logger.info('✓ Sidebar menu created (no submenus)');
 }
 
@@ -188,19 +195,20 @@ function handleWorkspaceEvents(event: string, args: any): void {
 
   switch (event) {
     case 'extension.command':
-      handleCommand(args.data);
+      if (args.data === 'show_dashboard') {
+        handleCommand(args.data);
+      } else {
+        logger.debug(`Ignoring non-dashboard command: ${args.data}`);
+      }
       break;
-      
+
     case 'extension.accessToken':
-      // Token reçu de Trimble Connect (après consentement utilisateur ou refresh)
       logger.info('Access token received from Trimble Connect');
       if (args.data && typeof args.data === 'string' && args.data !== 'pending' && args.data !== 'denied') {
         if (isInitialized) {
-          // Dashboard déjà initialisé — juste mettre à jour le token sans re-render
           logger.info('Updating access token (dashboard already initialized)');
           trimbleClient.updateAccessToken(args.data);
         } else {
-          // Première initialisation — lancer le dashboard
           getCurrentProjectInfo().then(projectInfo => {
             if (projectInfo) {
               initializeWithToken(args.data, projectInfo);
@@ -209,11 +217,11 @@ function handleWorkspaceEvents(event: string, args: any): void {
         }
       }
       break;
-      
+
     case 'extension.userSettingsChanged':
       logger.info('User settings changed');
       break;
-      
+
     default:
       logger.debug(`Unhandled event: ${event}`, args);
   }
@@ -233,9 +241,8 @@ async function handleCommand(command: string): Promise<void> {
   switch (command) {
     case 'show_dashboard':
       await showDashboard();
-      workspaceAPI.ui.setActiveMenuItem(command);
       break;
-      
+
     default:
       logger.warn(`Unknown command: ${command}`);
   }
