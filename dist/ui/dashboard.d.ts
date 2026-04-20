@@ -32,6 +32,12 @@ export declare class Dashboard {
     private saveToCache;
     private loadAllData;
     private renderAllSections;
+    /**
+     * Lightweight signature of the current dataset used to detect if a background
+     * refresh actually brought new data. Avoids the unnecessary second animation
+     * replay when cache and fresh data are identical.
+     */
+    private dataSignature;
     private refreshDataInBackground;
     private attachHeaderEvents;
     private applyTileVisibility;
@@ -40,6 +46,11 @@ export declare class Dashboard {
     private renderMetrics;
     private trend;
     private setMetric;
+    /**
+     * Matches the CSS `tile-enter` stagger (40ms per tile, capped at 800ms)
+     * so chart animations start at the same moment their tile fades in.
+     */
+    private getTileStartDelay;
     private renderCharts;
     private renderCumulativeChart;
     private renderDepositFrequencyChart;

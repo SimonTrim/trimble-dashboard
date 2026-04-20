@@ -287,6 +287,36 @@ export class Dashboard {
     this.attachBcfCreatedResolvedPeriod();
   }
 
+  /**
+   * Lightweight signature of the current dataset used to detect if a background
+   * refresh actually brought new data. Avoids the unnecessary second animation
+   * replay when cache and fresh data are identical.
+   */
+  private dataSignature(files: ProjectFile[], topics: BCFTopic[], notes: TrimbleNote[], views: ProjectView[]): string {
+    const lastTs = (items: any[], ...fields: string[]) => {
+      let max = 0;
+      for (const it of items) {
+        for (const f of fields) {
+          const v = it?.[f];
+          if (!v) continue;
+          const t = v instanceof Date ? v.getTime() : new Date(v).getTime();
+          if (!isNaN(t) && t > max) max = t;
+        }
+      }
+      return max;
+    };
+    return [
+      files.length,
+      topics.length,
+      notes.length,
+      views.length,
+      lastTs(files, 'uploadedAt', 'lastModified'),
+      lastTs(topics, 'modifiedAt', 'createdAt'),
+      lastTs(notes, 'updatedAt', 'createdAt'),
+      lastTs(views, 'createdAt'),
+    ].join(':');
+  }
+
   private async refreshDataInBackground(): Promise<void> {
     try {
       const [files, topics, notes, views] = await Promise.all([
@@ -295,13 +325,23 @@ export class Dashboard {
         notesService.getActiveNotes().catch(() => this.allNotes),
         viewsService.getAllViews().catch(() => this.allViews),
       ]);
+
+      const oldSig = this.dataSignature(this.allFiles, this.allTopics, this.allNotes, this.allViews);
+      const newSig = this.dataSignature(files, topics, notes, views);
+
+      if (oldSig === newSig) {
+        logger.info('✓ Background refresh: data unchanged, skipping re-render');
+        this.saveToCache();
+        return;
+      }
+
+      logger.info('Background refresh: data changed, re-rendering');
       this.allFiles = files;
       this.allTopics = topics;
       this.allNotes = notes;
       this.allViews = views;
       this.renderAllSections();
       this.saveToCache();
-      logger.info('Background refresh complete');
     } catch (error) {
       logger.warn('Background refresh failed', { error });
     }
@@ -481,6 +521,16 @@ export class Dashboard {
   // CHARTS
   // =============================================
 
+  /**
+   * Matches the CSS `tile-enter` stagger (40ms per tile, capped at 800ms)
+   * so chart animations start at the same moment their tile fades in.
+   */
+  private getTileStartDelay(tileId: string): number {
+    const idx = this.tileConfig.order.indexOf(tileId);
+    if (idx < 0) return 0;
+    return Math.min(800, idx * 40);
+  }
+
   private renderCharts(): void {
     const s: BCFStatusData = { open: 0, inProgress: 0, resolved: 0, closed: 0 };
     const p: BCFPriorityData = { high: 0, medium: 0, low: 0 };
@@ -491,8 +541,8 @@ export class Dashboard {
       if (pr === 'high') p.high++; else if (pr === 'low') p.low++; else p.medium++;
     });
 
-    this.chartsManager.createBCFStatusDonutChart('bcf-status-donut-canvas', s);
-    this.chartsManager.createBCFPriorityChart('bcf-priority-canvas', p);
+    this.chartsManager.createBCFStatusDonutChart('bcf-status-donut-canvas', s, 'doughnut', this.getTileStartDelay('bcf-status-donut'));
+    this.chartsManager.createBCFPriorityChart('bcf-priority-canvas', p, 'doughnut', this.getTileStartDelay('bcf-priority-chart'));
 
     this.renderCumulativeChart();
     this.renderDepositFrequencyChart();
@@ -501,7 +551,7 @@ export class Dashboard {
 
     const ext: Record<string, number> = {};
     this.allFiles.forEach(f => { const e = (f.extension || 'other').toLowerCase(); ext[e] = (ext[e] || 0) + 1; });
-    this.chartsManager.createFileTypeChart('filetype-canvas', ext);
+    this.chartsManager.createFileTypeChart('filetype-canvas', ext, 'pie', this.getTileStartDelay('filetype-chart'));
   }
 
   private renderCumulativeChart(): void {
@@ -517,7 +567,7 @@ export class Dashboard {
       cumulative += byMonth[key];
       return { label: key, cumulative };
     });
-    this.chartsManager.createCumulativeChart('cumulative-canvas', data);
+    this.chartsManager.createCumulativeChart('cumulative-canvas', data, 'line', this.getTileStartDelay('cumulative-chart'));
   }
 
   private renderDepositFrequencyChart(): void {
@@ -536,10 +586,10 @@ export class Dashboard {
       const label = `${weekStart.getFullYear()}-w${String(Math.ceil((weekStart.getDate()) / 7)).padStart(2, '0')}`;
       weeks.push({ label, count });
     }
-    this.chartsManager.createDepositFrequencyChart('deposit-freq-canvas', weeks);
+    this.chartsManager.createDepositFrequencyChart('deposit-freq-canvas', weeks, 'bar', this.getTileStartDelay('deposit-freq-chart'));
   }
 
-  private renderBCFCreatedResolvedChart(days: number): void {
+  private renderBCFCreatedResolvedChart(days: number, withStagger: boolean = true): void {
     const now = new Date();
     const data: { label: string; created: number; resolved: number }[] = [];
     const step = days <= 14 ? 1 : 7;
@@ -564,7 +614,8 @@ export class Dashboard {
 
       data.push({ label: start.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), created, resolved });
     }
-    this.chartsManager.createBCFCreatedResolvedChart('bcf-created-resolved-canvas', data);
+    const delay = withStagger ? this.getTileStartDelay('bcf-created-resolved') : 0;
+    this.chartsManager.createBCFCreatedResolvedChart('bcf-created-resolved-canvas', data, delay);
   }
 
   private attachBcfCreatedResolvedPeriod(): void {
@@ -574,7 +625,7 @@ export class Dashboard {
         const period = parseInt(target.dataset.period || '7', 10);
         document.querySelectorAll('.bcf-cr-period-btn').forEach(b => b.classList.remove('active'));
         target.classList.add('active');
-        this.renderBCFCreatedResolvedChart(period);
+        this.renderBCFCreatedResolvedChart(period, false);
       });
     });
   }

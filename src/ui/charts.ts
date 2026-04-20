@@ -75,14 +75,20 @@ function getBaseOpts() {
 
 /**
  * Animation config for circular charts (pie/doughnut):
- * Sweeps from 0° to 360° (rotate) with the arcs growing from the center (scale).
+ * Sweeps cleanly from 0° to 360° (rotate). `animateScale` is disabled so that
+ * the rotation is clearly visible (otherwise the arcs grow from the center at
+ * the same time as they rotate, which hides the sweep effect).
+ *
+ * `startDelay` delays the whole animation. Used to synchronize the sweep with
+ * the tile's CSS fade-in animation so the user always sees the full rotation.
  */
-function getCircularAnimation() {
+function getCircularAnimation(startDelay: number = 0) {
   return {
-    duration: 1300,
-    easing: 'easeOutCubic' as const,
+    duration: 1600,
+    delay: startDelay,
+    easing: 'easeOutQuart' as const,
     animateRotate: true,
-    animateScale: true,
+    animateScale: false,
   };
 }
 
@@ -91,15 +97,15 @@ function getCircularAnimation() {
  * Each bar appears with a delay based on its index, creating a left-to-right sweep effect.
  * Bars grow from the bottom (y from 0 to value).
  */
-function getBarAnimation(): any {
+function getBarAnimation(startDelay: number = 0): any {
   return {
     duration: 800,
     easing: 'easeOutCubic',
     delay: (context: any) => {
       if (context.type === 'data' && context.mode === 'default' && !context.dropped) {
-        return context.dataIndex * 60;
+        return startDelay + context.dataIndex * 60;
       }
-      return 0;
+      return startDelay;
     },
   };
 }
@@ -108,7 +114,7 @@ function getBarAnimation(): any {
  * Animation config for line/area charts:
  * Sweeps from left to right, drawing the line progressively.
  */
-function getLineAnimation(): any {
+function getLineAnimation(startDelay: number = 0): any {
   return {
     x: {
       type: 'number',
@@ -118,7 +124,7 @@ function getLineAnimation(): any {
       delay(ctx: any) {
         if (ctx.type !== 'data' || ctx.xStarted) return 0;
         ctx.xStarted = true;
-        return ctx.index * (1200 / Math.max(1, ctx.dataset.data.length));
+        return startDelay + ctx.index * (1200 / Math.max(1, ctx.dataset.data.length));
       },
     },
     y: {
@@ -132,7 +138,7 @@ function getLineAnimation(): any {
       delay(ctx: any) {
         if (ctx.type !== 'data' || ctx.yStarted) return 0;
         ctx.yStarted = true;
-        return ctx.index * (1200 / Math.max(1, ctx.dataset.data.length));
+        return startDelay + ctx.index * (1200 / Math.max(1, ctx.dataset.data.length));
       },
     },
   };
@@ -142,8 +148,8 @@ function withAnimation(opts: any, animation: any): any {
   return { ...opts, animation, animations: undefined };
 }
 
-function withLineAnimations(opts: any): any {
-  return { ...opts, animation: { duration: 0 }, animations: getLineAnimation() };
+function withLineAnimations(opts: any, startDelay: number = 0): any {
+  return { ...opts, animation: { duration: 0 }, animations: getLineAnimation(startDelay) };
 }
 
 export class ChartsManager {
@@ -158,7 +164,7 @@ export class ChartsManager {
     this.charts.set(key, chart);
   }
 
-  createBCFChart(canvasId: string, data: BCFStatusData): void {
+  createBCFChart(canvasId: string, data: BCFStatusData, startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -181,7 +187,7 @@ export class ChartsManager {
           }],
         },
         options: {
-          ...withAnimation(getBaseOpts(), getBarAnimation()),
+          ...withAnimation(getBaseOpts(), getBarAnimation(startDelay)),
           plugins: { ...getBaseOpts().plugins, legend: { display: false } },
           scales: {
             y: { beginAtZero: true, ticks: { stepSize: 1, color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } },
@@ -193,7 +199,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating BCF chart', { error }); }
   }
 
-  createBCFPriorityChart(canvasId: string, data: BCFPriorityData, chartType: string = 'doughnut'): void {
+  createBCFPriorityChart(canvasId: string, data: BCFPriorityData, chartType: string = 'doughnut', startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -211,21 +217,21 @@ export class ChartsManager {
         const chart = new Chart(ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Topics', data: values, backgroundColor: colors, borderRadius: 8, borderSkipped: false, barPercentage: 0.55 }] },
-          options: { ...withAnimation(getBaseOpts(), getBarAnimation()), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+          options: { ...withAnimation(getBaseOpts(), getBarAnimation(startDelay)), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
         });
         this.setChart('bcfPriority', chart);
       } else {
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
-          options: { ...withAnimation(getBaseOpts(), getCircularAnimation()), cutout: chartType === 'doughnut' ? '68%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: { ...withAnimation(getBaseOpts(), getCircularAnimation(startDelay)), cutout: chartType === 'doughnut' ? '68%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
         });
         this.setChart('bcfPriority', chart);
       }
     } catch (error) { logger.error('Error creating BCF priority chart', { error }); }
   }
 
-  createFilesTrendChart(canvasId: string, data: FileTrendDataPoint[]): void {
+  createFilesTrendChart(canvasId: string, data: FileTrendDataPoint[], startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -269,7 +275,7 @@ export class ChartsManager {
           }],
         },
         options: {
-          ...withLineAnimations(getBaseOpts()),
+          ...withLineAnimations(getBaseOpts(), startDelay),
           interaction: { mode: 'index', intersect: false },
           plugins: { ...getBaseOpts().plugins, legend: { display: false } },
           scales: {
@@ -282,7 +288,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating files trend chart', { error }); }
   }
 
-  createFileTypeChart(canvasId: string, byExtension: Record<string, number>, chartType: string = 'pie'): void {
+  createFileTypeChart(canvasId: string, byExtension: Record<string, number>, chartType: string = 'pie', startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -307,21 +313,21 @@ export class ChartsManager {
         const chart = new Chart(ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Fichiers', data: counts, backgroundColor: colors, borderRadius: 6, borderSkipped: false, barPercentage: 0.6 }] },
-          options: { ...withAnimation(getBaseOpts(), getBarAnimation()), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 10 }, maxRotation: 45 }, grid: { display: false }, border: { display: false } } } },
+          options: { ...withAnimation(getBaseOpts(), getBarAnimation(startDelay)), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 10 }, maxRotation: 45 }, grid: { display: false }, border: { display: false } } } },
         });
         this.setChart('fileType', chart);
       } else {
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0, spacing: 2 }] },
-          options: { ...withAnimation(getBaseOpts(), getCircularAnimation()), cutout: chartType === 'doughnut' ? '60%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: { ...withAnimation(getBaseOpts(), getCircularAnimation(startDelay)), cutout: chartType === 'doughnut' ? '60%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
         });
         this.setChart('fileType', chart);
       }
     } catch (error) { logger.error('Error creating file type chart', { error }); }
   }
 
-  createCumulativeChart(canvasId: string, data: { label: string; cumulative: number }[], chartType: string = 'line'): void {
+  createCumulativeChart(canvasId: string, data: { label: string; cumulative: number }[], chartType: string = 'line', startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -363,8 +369,8 @@ export class ChartsManager {
       };
 
       const animOpts = chartType === 'bar'
-        ? withAnimation(getBaseOpts(), getBarAnimation())
-        : withLineAnimations(getBaseOpts());
+        ? withAnimation(getBaseOpts(), getBarAnimation(startDelay))
+        : withLineAnimations(getBaseOpts(), startDelay);
 
       const chart = new Chart(ctx, {
         type: chartType as any,
@@ -387,7 +393,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating cumulative chart', { error }); }
   }
 
-  createDepositFrequencyChart(canvasId: string, data: { label: string; count: number }[], chartType: string = 'bar'): void {
+  createDepositFrequencyChart(canvasId: string, data: { label: string; count: number }[], chartType: string = 'bar', startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -417,8 +423,8 @@ export class ChartsManager {
       };
 
       const animOpts = chartType === 'line'
-        ? withLineAnimations(getBaseOpts())
-        : withAnimation(getBaseOpts(), getBarAnimation());
+        ? withLineAnimations(getBaseOpts(), startDelay)
+        : withAnimation(getBaseOpts(), getBarAnimation(startDelay));
 
       const chart = new Chart(ctx, {
         type: chartType as any,
@@ -436,7 +442,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating deposit frequency chart', { error }); }
   }
 
-  createBCFCreatedResolvedChart(canvasId: string, data: { label: string; created: number; resolved: number }[]): void {
+  createBCFCreatedResolvedChart(canvasId: string, data: { label: string; created: number; resolved: number }[], startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -473,7 +479,7 @@ export class ChartsManager {
           ],
         },
         options: {
-          ...withLineAnimations(getBaseOpts()),
+          ...withLineAnimations(getBaseOpts(), startDelay),
           interaction: { mode: 'index', intersect: false },
           plugins: {
             ...getBaseOpts().plugins,
@@ -489,7 +495,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating BCF created/resolved chart', { error }); }
   }
 
-  createBCFStatusDonutChart(canvasId: string, data: BCFStatusData, chartType: string = 'doughnut'): void {
+  createBCFStatusDonutChart(canvasId: string, data: BCFStatusData, chartType: string = 'doughnut', startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -507,14 +513,14 @@ export class ChartsManager {
         const chart = new Chart(ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Topics', data: values, backgroundColor: colors, borderRadius: 8, borderSkipped: false, barPercentage: 0.55 }] },
-          options: { ...withAnimation(getBaseOpts(), getBarAnimation()), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+          options: { ...withAnimation(getBaseOpts(), getBarAnimation(startDelay)), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
         });
         this.setChart('bcfStatusDonut', chart);
       } else {
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
-          options: { ...withAnimation(getBaseOpts(), getCircularAnimation()), cutout: chartType === 'doughnut' ? '65%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: { ...withAnimation(getBaseOpts(), getCircularAnimation(startDelay)), cutout: chartType === 'doughnut' ? '65%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
         });
         this.setChart('bcfStatusDonut', chart);
       }
