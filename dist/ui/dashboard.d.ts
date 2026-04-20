@@ -49,8 +49,18 @@ export declare class Dashboard {
     /**
      * Matches the CSS `tile-enter` stagger (40ms per tile, capped at 800ms)
      * so chart animations start at the same moment their tile fades in.
+     *
+     * Used for line and bar charts where the progressive reveal / bar grow
+     * is visible through a partial-opacity tile.
      */
     private getTileStartDelay;
+    /**
+     * Delay for circular charts (pie / doughnut). Rotation is a sweep — it's
+     * only visible if the tile is already opaque when it starts. We therefore
+     * wait for the tile's CSS fade-in (~600ms) to finish before kicking off
+     * the rotation, then rotate cleanly over 2 seconds.
+     */
+    private getCircularChartDelay;
     /**
      * File-dependent charts: Cumulative, Deposit Frequency, File Type pie.
      * Called once, as soon as `filesPromise` resolves, so each chart animates

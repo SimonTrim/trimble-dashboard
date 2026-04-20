@@ -155,20 +155,25 @@ function getBaseOpts() {
 /**
  * Animation config for circular charts (pie / doughnut).
  *
- * Sweeps cleanly from 0° to 360°. `animateScale` is disabled so the rotation
- * is clearly visible — otherwise arcs grow from center while rotating, which
- * hides the sweep effect.
+ * Sweeps cleanly from 0° to 360° over 2 seconds. `animateScale` is disabled
+ * so the rotation is clearly visible — otherwise arcs grow from center while
+ * rotating, which hides the sweep effect.
+ *
+ * `startDelay` must be set so the sweep starts AFTER the tile finishes its
+ * CSS fade-in. If the rotation runs while the tile is still invisible (or
+ * fading in with a fast easing), the user sees almost no movement — which
+ * was exactly what was happening on first load.
  *
  * IMPORTANT: we deliberately do NOT set `animations: undefined` in the chart
  * options (see `withAnimation` below). Chart.js drives the doughnut rotation
- * through its default `animations.numbers` config on `startAngle` / `endAngle`.
- * Blowing those defaults away silently disables the rotation — which was the
- * root cause of "mes anneaux / camemberts ne tournent pas".
+ * through its default `animations.numbers` config on `startAngle` / `endAngle`
+ * — blowing those defaults away silently disables the rotation.
  */
-function getCircularAnimation() {
+function getCircularAnimation(startDelay: number = 0) {
   return {
-    duration: 1400,
-    easing: 'easeOutQuart' as const,
+    duration: 2000,
+    delay: startDelay,
+    easing: 'easeOutCubic' as const,
     animateRotate: true,
     animateScale: false,
   };
@@ -319,7 +324,7 @@ export class ChartsManager {
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
-          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation())), cutout: chartType === 'doughnut' ? '68%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation(startDelay))), cutout: chartType === 'doughnut' ? '68%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
         });
         this.setChart('bcfPriority', chart);
       }
@@ -415,7 +420,7 @@ export class ChartsManager {
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0, spacing: 2 }] },
-          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation())), cutout: chartType === 'doughnut' ? '60%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation(startDelay))), cutout: chartType === 'doughnut' ? '60%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
         });
         this.setChart('fileType', chart);
       }
@@ -615,7 +620,7 @@ export class ChartsManager {
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
-          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation())), cutout: chartType === 'doughnut' ? '65%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation(startDelay))), cutout: chartType === 'doughnut' ? '65%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
         });
         this.setChart('bcfStatusDonut', chart);
       }

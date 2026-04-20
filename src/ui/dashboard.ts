@@ -538,11 +538,24 @@ export class Dashboard {
   /**
    * Matches the CSS `tile-enter` stagger (40ms per tile, capped at 800ms)
    * so chart animations start at the same moment their tile fades in.
+   *
+   * Used for line and bar charts where the progressive reveal / bar grow
+   * is visible through a partial-opacity tile.
    */
   private getTileStartDelay(tileId: string): number {
     const idx = this.tileConfig.order.indexOf(tileId);
     if (idx < 0) return 0;
     return Math.min(800, idx * 40);
+  }
+
+  /**
+   * Delay for circular charts (pie / doughnut). Rotation is a sweep — it's
+   * only visible if the tile is already opaque when it starts. We therefore
+   * wait for the tile's CSS fade-in (~600ms) to finish before kicking off
+   * the rotation, then rotate cleanly over 2 seconds.
+   */
+  private getCircularChartDelay(tileId: string): number {
+    return this.getTileStartDelay(tileId) + 600;
   }
 
   /**
@@ -556,7 +569,7 @@ export class Dashboard {
 
     const ext: Record<string, number> = {};
     this.allFiles.forEach(f => { const e = (f.extension || 'other').toLowerCase(); ext[e] = (ext[e] || 0) + 1; });
-    this.chartsManager.createFileTypeChart('filetype-canvas', ext, 'pie', this.getTileStartDelay('filetype-chart'));
+    this.chartsManager.createFileTypeChart('filetype-canvas', ext, 'pie', this.getCircularChartDelay('filetype-chart'));
   }
 
   /**
@@ -573,8 +586,8 @@ export class Dashboard {
       if (pr === 'high') p.high++; else if (pr === 'low') p.low++; else p.medium++;
     });
 
-    this.chartsManager.createBCFStatusDonutChart('bcf-status-donut-canvas', s, 'doughnut', this.getTileStartDelay('bcf-status-donut'));
-    this.chartsManager.createBCFPriorityChart('bcf-priority-canvas', p, 'doughnut', this.getTileStartDelay('bcf-priority-chart'));
+    this.chartsManager.createBCFStatusDonutChart('bcf-status-donut-canvas', s, 'doughnut', this.getCircularChartDelay('bcf-status-donut'));
+    this.chartsManager.createBCFPriorityChart('bcf-priority-canvas', p, 'doughnut', this.getCircularChartDelay('bcf-priority-chart'));
     this.renderBCFCreatedResolvedChart(7);
     this.attachBcfCreatedResolvedPeriod();
   }
