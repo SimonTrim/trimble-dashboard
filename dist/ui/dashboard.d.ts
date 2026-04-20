@@ -51,6 +51,22 @@ export declare class Dashboard {
      * so chart animations start at the same moment their tile fades in.
      */
     private getTileStartDelay;
+    /**
+     * File-dependent charts: Cumulative, Deposit Frequency, File Type pie.
+     * Called once, as soon as `filesPromise` resolves, so each chart animates
+     * exactly one time.
+     */
+    private renderFileCharts;
+    /**
+     * Topic-dependent charts: BCF Status donut, BCF Priority donut, BCF
+     * Created vs Resolved. Called once, as soon as `topicsPromise` resolves.
+     */
+    private renderTopicCharts;
+    /**
+     * Renders every chart. Only used by the cache-restore path and by
+     * background refresh (where `chartsManager.setAnimationsEnabled(false)` is
+     * flipped first so charts update silently).
+     */
     private renderCharts;
     private renderCumulativeChart;
     private renderDepositFrequencyChart;

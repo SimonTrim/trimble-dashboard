@@ -5,6 +5,23 @@
 import { BCFStatusData, BCFPriorityData, FileTrendDataPoint } from '../models/types';
 export declare class ChartsManager {
     private charts;
+    private animationsEnabled;
+    /**
+     * Toggle chart animations. Called with `false` during background refresh so
+     * charts refresh silently (no animation replay) when fresh data arrives
+     * from the API after the first render.
+     */
+    setAnimationsEnabled(enabled: boolean): void;
+    /**
+     * Returns the provided animation config when animations are enabled,
+     * or `false` (Chart.js "no animation") otherwise.
+     */
+    private anim;
+    /**
+     * Line reveal helper: returns a smooth-reveal config when animations are
+     * enabled, or a plain no-animation config during silent refresh.
+     */
+    private lineOpts;
     private destroyChart;
     private setChart;
     createBCFChart(canvasId: string, data: BCFStatusData, startDelay?: number): void;

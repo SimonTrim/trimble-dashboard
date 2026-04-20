@@ -9,6 +9,85 @@ import { logger } from '../utils/logger';
 
 Chart.register(...registerables);
 
+/**
+ * Clip-based left-to-right reveal plugin for line / area charts.
+ *
+ * Why not use Chart.js per-point animations? The built-in progressive animation
+ * animates each point's x/y independently, which creates a visible "stepped"
+ * feeling (each segment pops in with its own easing). A clipping rectangle
+ * that grows from left to right gives a perfectly smooth wipe-in effect that
+ * is independent of the number of data points.
+ */
+const lineRevealPlugin = {
+  id: 'lineReveal',
+  defaults: {
+    enabled: false,
+    duration: 1400,
+    delay: 0,
+  },
+  beforeDatasetsDraw(chart: any, _args: any, opts: any): void {
+    if (!opts || !opts.enabled) return;
+
+    const state = chart.$lineReveal ?? (chart.$lineReveal = {
+      progress: 0,
+      startedAt: null,
+      done: false,
+      clippedThisDraw: false,
+    });
+    // Must reset every draw cycle so `afterDatasetsDraw` only restores when we
+    // actually saved. Without this, a draw that short-circuits (because the
+    // animation has finished) would still try to restore, unbalancing the
+    // canvas state and breaking other plugins.
+    state.clippedThisDraw = false;
+    if (state.done) return;
+
+    if (state.startedAt === null) {
+      state.startedAt = performance.now() + (opts.delay || 0);
+    }
+
+    const duration = opts.duration || 1400;
+    const elapsed = performance.now() - state.startedAt;
+
+    if (elapsed < 0) {
+      state.progress = 0;
+    } else if (elapsed >= duration) {
+      state.progress = 1;
+      state.done = true;
+    } else {
+      const t = elapsed / duration;
+      state.progress = 1 - Math.pow(1 - t, 3);
+    }
+
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.beginPath();
+    const width = (chartArea.right - chartArea.left) * state.progress;
+    ctx.rect(
+      chartArea.left - 1,
+      chartArea.top - 12,
+      width + 2,
+      chartArea.bottom - chartArea.top + 24,
+    );
+    ctx.clip();
+    state.clippedThisDraw = true;
+
+    if (!state.done) {
+      requestAnimationFrame(() => {
+        try { chart.draw(); } catch { /* chart destroyed */ }
+      });
+    }
+  },
+  afterDatasetsDraw(chart: any): void {
+    const state = chart.$lineReveal;
+    if (state && state.clippedThisDraw) {
+      chart.ctx.restore();
+      state.clippedThisDraw = false;
+    }
+  },
+};
+
+Chart.register(lineRevealPlugin);
+
 function isDark(): boolean {
   return document.documentElement.getAttribute('data-theme') === 'dark';
 }
@@ -74,18 +153,21 @@ function getBaseOpts() {
 }
 
 /**
- * Animation config for circular charts (pie/doughnut):
- * Sweeps cleanly from 0° to 360° (rotate). `animateScale` is disabled so that
- * the rotation is clearly visible (otherwise the arcs grow from the center at
- * the same time as they rotate, which hides the sweep effect).
+ * Animation config for circular charts (pie / doughnut).
  *
- * `startDelay` delays the whole animation. Used to synchronize the sweep with
- * the tile's CSS fade-in animation so the user always sees the full rotation.
+ * Sweeps cleanly from 0° to 360°. `animateScale` is disabled so the rotation
+ * is clearly visible — otherwise arcs grow from center while rotating, which
+ * hides the sweep effect.
+ *
+ * IMPORTANT: we deliberately do NOT set `animations: undefined` in the chart
+ * options (see `withAnimation` below). Chart.js drives the doughnut rotation
+ * through its default `animations.numbers` config on `startAngle` / `endAngle`.
+ * Blowing those defaults away silently disables the rotation — which was the
+ * root cause of "mes anneaux / camemberts ne tournent pas".
  */
-function getCircularAnimation(startDelay: number = 0) {
+function getCircularAnimation() {
   return {
-    duration: 1600,
-    delay: startDelay,
+    duration: 1400,
     easing: 'easeOutQuart' as const,
     animateRotate: true,
     animateScale: false,
@@ -94,16 +176,15 @@ function getCircularAnimation(startDelay: number = 0) {
 
 /**
  * Animation config for bar charts:
- * Each bar appears with a delay based on its index, creating a left-to-right sweep effect.
- * Bars grow from the bottom (y from 0 to value).
+ * Each bar appears with a delay based on its index, creating a left-to-right sweep.
  */
 function getBarAnimation(startDelay: number = 0): any {
   return {
-    duration: 800,
+    duration: 700,
     easing: 'easeOutCubic',
     delay: (context: any) => {
       if (context.type === 'data' && context.mode === 'default' && !context.dropped) {
-        return startDelay + context.dataIndex * 60;
+        return startDelay + context.dataIndex * 45;
       }
       return startDelay;
     },
@@ -111,49 +192,63 @@ function getBarAnimation(startDelay: number = 0): any {
 }
 
 /**
- * Animation config for line/area charts:
- * Sweeps from left to right, drawing the line progressively.
+ * Applies an animation config onto a base options object.
+ *
+ * We only set `animation` (singular). We do NOT touch `animations` (plural) so
+ * Chart.js keeps its per-property defaults — which are required for doughnut
+ * rotation to play.
  */
-function getLineAnimation(startDelay: number = 0): any {
+function withAnimation(opts: any, animation: any): any {
+  return { ...opts, animation };
+}
+
+/**
+ * Returns options configured for the clip-based line reveal plugin.
+ * Chart.js's own animation is disabled so only the smooth wipe plays.
+ */
+function withLineReveal(opts: any, startDelay: number = 0, duration: number = 1400): any {
+  const basePlugins = (opts && opts.plugins) || {};
   return {
-    x: {
-      type: 'number',
-      easing: 'easeOutCubic',
-      duration: 1200,
-      from: NaN,
-      delay(ctx: any) {
-        if (ctx.type !== 'data' || ctx.xStarted) return 0;
-        ctx.xStarted = true;
-        return startDelay + ctx.index * (1200 / Math.max(1, ctx.dataset.data.length));
-      },
-    },
-    y: {
-      type: 'number',
-      easing: 'easeOutCubic',
-      duration: 1200,
-      from: (ctx: any) => {
-        if (ctx.index === 0) return ctx.chart.scales.y.getPixelForValue(100);
-        return ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.index - 1]?.getProps(['y'], true).y || 0;
-      },
-      delay(ctx: any) {
-        if (ctx.type !== 'data' || ctx.yStarted) return 0;
-        ctx.yStarted = true;
-        return startDelay + ctx.index * (1200 / Math.max(1, ctx.dataset.data.length));
-      },
+    ...opts,
+    animation: { duration: 0 },
+    animations: { colors: false, numbers: false },
+    plugins: {
+      ...basePlugins,
+      lineReveal: { enabled: true, duration, delay: startDelay },
     },
   };
 }
 
-function withAnimation(opts: any, animation: any): any {
-  return { ...opts, animation, animations: undefined };
-}
-
-function withLineAnimations(opts: any, startDelay: number = 0): any {
-  return { ...opts, animation: { duration: 0 }, animations: getLineAnimation(startDelay) };
-}
-
 export class ChartsManager {
   private charts: Map<string, Chart> = new Map();
+  private animationsEnabled: boolean = true;
+
+  /**
+   * Toggle chart animations. Called with `false` during background refresh so
+   * charts refresh silently (no animation replay) when fresh data arrives
+   * from the API after the first render.
+   */
+  setAnimationsEnabled(enabled: boolean): void {
+    this.animationsEnabled = enabled;
+  }
+
+  /**
+   * Returns the provided animation config when animations are enabled,
+   * or `false` (Chart.js "no animation") otherwise.
+   */
+  private anim(animation: any): any {
+    return this.animationsEnabled ? animation : false;
+  }
+
+  /**
+   * Line reveal helper: returns a smooth-reveal config when animations are
+   * enabled, or a plain no-animation config during silent refresh.
+   */
+  private lineOpts(opts: any, startDelay: number = 0, duration: number = 1400): any {
+    return this.animationsEnabled
+      ? withLineReveal(opts, startDelay, duration)
+      : withAnimation(opts, false);
+  }
 
   private destroyChart(key: string): void {
     const c = this.charts.get(key);
@@ -187,7 +282,7 @@ export class ChartsManager {
           }],
         },
         options: {
-          ...withAnimation(getBaseOpts(), getBarAnimation(startDelay)),
+          ...withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay))),
           plugins: { ...getBaseOpts().plugins, legend: { display: false } },
           scales: {
             y: { beginAtZero: true, ticks: { stepSize: 1, color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } },
@@ -217,14 +312,14 @@ export class ChartsManager {
         const chart = new Chart(ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Topics', data: values, backgroundColor: colors, borderRadius: 8, borderSkipped: false, barPercentage: 0.55 }] },
-          options: { ...withAnimation(getBaseOpts(), getBarAnimation(startDelay)), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+          options: { ...withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay))), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
         });
         this.setChart('bcfPriority', chart);
       } else {
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
-          options: { ...withAnimation(getBaseOpts(), getCircularAnimation(startDelay)), cutout: chartType === 'doughnut' ? '68%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation())), cutout: chartType === 'doughnut' ? '68%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
         });
         this.setChart('bcfPriority', chart);
       }
@@ -275,7 +370,7 @@ export class ChartsManager {
           }],
         },
         options: {
-          ...withLineAnimations(getBaseOpts(), startDelay),
+          ...this.lineOpts(getBaseOpts(), startDelay),
           interaction: { mode: 'index', intersect: false },
           plugins: { ...getBaseOpts().plugins, legend: { display: false } },
           scales: {
@@ -313,14 +408,14 @@ export class ChartsManager {
         const chart = new Chart(ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Fichiers', data: counts, backgroundColor: colors, borderRadius: 6, borderSkipped: false, barPercentage: 0.6 }] },
-          options: { ...withAnimation(getBaseOpts(), getBarAnimation(startDelay)), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 10 }, maxRotation: 45 }, grid: { display: false }, border: { display: false } } } },
+          options: { ...withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay))), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 10 }, maxRotation: 45 }, grid: { display: false }, border: { display: false } } } },
         });
         this.setChart('fileType', chart);
       } else {
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0, spacing: 2 }] },
-          options: { ...withAnimation(getBaseOpts(), getCircularAnimation(startDelay)), cutout: chartType === 'doughnut' ? '60%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation())), cutout: chartType === 'doughnut' ? '60%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
         });
         this.setChart('fileType', chart);
       }
@@ -369,8 +464,8 @@ export class ChartsManager {
       };
 
       const animOpts = chartType === 'bar'
-        ? withAnimation(getBaseOpts(), getBarAnimation(startDelay))
-        : withLineAnimations(getBaseOpts(), startDelay);
+        ? withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay)))
+        : this.lineOpts(getBaseOpts(), startDelay);
 
       const chart = new Chart(ctx, {
         type: chartType as any,
@@ -379,7 +474,7 @@ export class ChartsManager {
           ...animOpts,
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            ...getBaseOpts().plugins,
+            ...(animOpts.plugins || getBaseOpts().plugins),
             legend: { display: false },
             tooltip: { ...getTooltipStyle(), callbacks: { label: (context: any) => ` Total cumulé : ${context.parsed.y}` } },
           },
@@ -423,15 +518,15 @@ export class ChartsManager {
       };
 
       const animOpts = chartType === 'line'
-        ? withLineAnimations(getBaseOpts(), startDelay)
-        : withAnimation(getBaseOpts(), getBarAnimation(startDelay));
+        ? this.lineOpts(getBaseOpts(), startDelay)
+        : withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay)));
 
       const chart = new Chart(ctx, {
         type: chartType as any,
         data: { labels: data.map(d => d.label), datasets: [dataset as any] },
         options: {
           ...animOpts,
-          plugins: { ...getBaseOpts().plugins, legend: { display: false } },
+          plugins: { ...(animOpts.plugins || getBaseOpts().plugins), legend: { display: false } },
           scales: {
             y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } },
             x: { ticks: { color: tc.muted, font: { size: 10 }, maxRotation: 45 }, grid: { display: false }, border: { display: false } },
@@ -479,10 +574,10 @@ export class ChartsManager {
           ],
         },
         options: {
-          ...withLineAnimations(getBaseOpts(), startDelay),
+          ...this.lineOpts(getBaseOpts(), startDelay),
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            ...getBaseOpts().plugins,
+            ...this.lineOpts(getBaseOpts(), startDelay).plugins,
             legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'line', font: { size: 12 }, color: tc.muted } },
           },
           scales: {
@@ -513,14 +608,14 @@ export class ChartsManager {
         const chart = new Chart(ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Topics', data: values, backgroundColor: colors, borderRadius: 8, borderSkipped: false, barPercentage: 0.55 }] },
-          options: { ...withAnimation(getBaseOpts(), getBarAnimation(startDelay)), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+          options: { ...withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay))), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
         });
         this.setChart('bcfStatusDonut', chart);
       } else {
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
-          options: { ...withAnimation(getBaseOpts(), getCircularAnimation(startDelay)), cutout: chartType === 'doughnut' ? '65%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation())), cutout: chartType === 'doughnut' ? '65%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
         });
         this.setChart('bcfStatusDonut', chart);
       }

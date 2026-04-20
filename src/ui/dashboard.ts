@@ -229,10 +229,16 @@ export class Dashboard {
       this.hideLoader();
     };
 
+    // IMPORTANT: each chart is rendered exactly ONCE (when its own dependency
+    // is ready) to avoid the "double animation" effect. Previously this code
+    // called renderCharts() from BOTH filesPromise.then and topicsPromise.then,
+    // which re-created every chart twice — charts played their entry animation,
+    // then replayed it a fraction of a second later when the second promise
+    // settled.
     filesPromise.then(files => {
       this.allFiles = files;
       this.renderMetrics();
-      this.renderCharts();
+      this.renderFileCharts();
       this.renderTopContributors();
       this.renderTopUpdatedFiles();
       this.renderRecentFilesTable();
@@ -242,7 +248,7 @@ export class Dashboard {
     topicsPromise.then(topics => {
       this.allTopics = topics;
       this.renderMetrics();
-      this.renderCharts();
+      this.renderTopicCharts();
       this.renderBCFAssigneeChart();
       this.renderOldestUnresolvedBCF();
       this.renderRecentBCFTable();
@@ -335,12 +341,20 @@ export class Dashboard {
         return;
       }
 
-      logger.info('Background refresh: data changed, re-rendering');
+      logger.info('Background refresh: data changed, silent re-render');
       this.allFiles = files;
       this.allTopics = topics;
       this.allNotes = notes;
       this.allViews = views;
-      this.renderAllSections();
+      // Silent re-render: charts update in place without replaying their
+      // entry animation (which would look like a "double animation" a few
+      // seconds after the initial page load).
+      this.chartsManager.setAnimationsEnabled(false);
+      try {
+        this.renderAllSections();
+      } finally {
+        this.chartsManager.setAnimationsEnabled(true);
+      }
       this.saveToCache();
     } catch (error) {
       logger.warn('Background refresh failed', { error });
@@ -531,7 +545,25 @@ export class Dashboard {
     return Math.min(800, idx * 40);
   }
 
-  private renderCharts(): void {
+  /**
+   * File-dependent charts: Cumulative, Deposit Frequency, File Type pie.
+   * Called once, as soon as `filesPromise` resolves, so each chart animates
+   * exactly one time.
+   */
+  private renderFileCharts(): void {
+    this.renderCumulativeChart();
+    this.renderDepositFrequencyChart();
+
+    const ext: Record<string, number> = {};
+    this.allFiles.forEach(f => { const e = (f.extension || 'other').toLowerCase(); ext[e] = (ext[e] || 0) + 1; });
+    this.chartsManager.createFileTypeChart('filetype-canvas', ext, 'pie', this.getTileStartDelay('filetype-chart'));
+  }
+
+  /**
+   * Topic-dependent charts: BCF Status donut, BCF Priority donut, BCF
+   * Created vs Resolved. Called once, as soon as `topicsPromise` resolves.
+   */
+  private renderTopicCharts(): void {
     const s: BCFStatusData = { open: 0, inProgress: 0, resolved: 0, closed: 0 };
     const p: BCFPriorityData = { high: 0, medium: 0, low: 0 };
     this.allTopics.forEach(t => {
@@ -543,15 +575,18 @@ export class Dashboard {
 
     this.chartsManager.createBCFStatusDonutChart('bcf-status-donut-canvas', s, 'doughnut', this.getTileStartDelay('bcf-status-donut'));
     this.chartsManager.createBCFPriorityChart('bcf-priority-canvas', p, 'doughnut', this.getTileStartDelay('bcf-priority-chart'));
-
-    this.renderCumulativeChart();
-    this.renderDepositFrequencyChart();
     this.renderBCFCreatedResolvedChart(7);
     this.attachBcfCreatedResolvedPeriod();
+  }
 
-    const ext: Record<string, number> = {};
-    this.allFiles.forEach(f => { const e = (f.extension || 'other').toLowerCase(); ext[e] = (ext[e] || 0) + 1; });
-    this.chartsManager.createFileTypeChart('filetype-canvas', ext, 'pie', this.getTileStartDelay('filetype-chart'));
+  /**
+   * Renders every chart. Only used by the cache-restore path and by
+   * background refresh (where `chartsManager.setAnimationsEnabled(false)` is
+   * flipped first so charts update silently).
+   */
+  private renderCharts(): void {
+    this.renderFileCharts();
+    this.renderTopicCharts();
   }
 
   private renderCumulativeChart(): void {
