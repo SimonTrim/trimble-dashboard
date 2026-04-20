@@ -168,40 +168,142 @@ export class Dashboard {
   }
 
   // =============================================
-  // DATA LOADING
+  // DATA LOADING (progressive — each source renders as soon as ready)
   // =============================================
 
-  private async loadAllData(): Promise<void> {
-    this.showLoader();
-    try {
-      const [topics, files, notes, views] = await Promise.all([
-        bcfService.getAllTopics().catch(() => []),
-        filesService.getAllFiles().catch(() => []),
-        notesService.getActiveNotes().catch(() => []),
-        viewsService.getAllViews().catch(() => []),
-      ]);
-      this.allTopics = topics;
-      this.allFiles = files;
-      this.allNotes = notes;
-      this.allViews = views;
+  private static readonly CACHE_TTL_MS = 5 * 60 * 1000;
 
+  private getCacheKey(): string {
+    return `trimble-dashboard-cache-${this.projectName || 'default'}`;
+  }
+
+  private loadFromCache(): boolean {
+    try {
+      const raw = sessionStorage.getItem(this.getCacheKey());
+      if (!raw) return false;
+      const cached = JSON.parse(raw);
+      if (!cached.timestamp || Date.now() - cached.timestamp > Dashboard.CACHE_TTL_MS) return false;
+      this.allTopics = (cached.topics || []).map((t: any) => ({ ...t, createdAt: new Date(t.createdAt), modifiedAt: new Date(t.modifiedAt) }));
+      this.allFiles = (cached.files || []).map((f: any) => ({ ...f, uploadedAt: new Date(f.uploadedAt), lastModified: new Date(f.lastModified) }));
+      this.allNotes = (cached.notes || []).map((n: any) => ({ ...n, createdAt: new Date(n.createdAt), updatedAt: new Date(n.updatedAt) }));
+      this.allViews = (cached.views || []).map((v: any) => ({ ...v, createdAt: new Date(v.createdAt) }));
+      logger.info('✓ Loaded data from session cache');
+      return true;
+    } catch { return false; }
+  }
+
+  private saveToCache(): void {
+    try {
+      sessionStorage.setItem(this.getCacheKey(), JSON.stringify({
+        timestamp: Date.now(),
+        topics: this.allTopics,
+        files: this.allFiles,
+        notes: this.allNotes,
+        views: this.allViews,
+      }));
+    } catch { /* quota exceeded, ignore */ }
+  }
+
+  private async loadAllData(): Promise<void> {
+    const hasCache = this.loadFromCache();
+
+    if (hasCache) {
+      this.renderAllSections();
+      this.hideLoader();
+      this.loadThumbnails();
+      this.refreshDataInBackground();
+      return;
+    }
+
+    this.showLoader();
+
+    const filesPromise = filesService.getAllFiles().catch(() => [] as ProjectFile[]);
+    const topicsPromise = bcfService.getAllTopics().catch(() => [] as BCFTopic[]);
+    const notesPromise = notesService.getActiveNotes().catch(() => [] as TrimbleNote[]);
+    const viewsPromise = viewsService.getAllViews().catch(() => [] as ProjectView[]);
+
+    let firstResolved = false;
+    const onFirst = () => {
+      if (firstResolved) return;
+      firstResolved = true;
+      this.hideLoader();
+    };
+
+    filesPromise.then(files => {
+      this.allFiles = files;
+      this.renderMetrics();
+      this.renderCharts();
+      this.renderTopContributors();
+      this.renderTopUpdatedFiles();
+      this.renderRecentFilesTable();
+      onFirst();
+    });
+
+    topicsPromise.then(topics => {
+      this.allTopics = topics;
       this.renderMetrics();
       this.renderCharts();
       this.renderBCFAssigneeChart();
-      this.renderTopContributors();
-      this.renderTopUpdatedFiles();
       this.renderOldestUnresolvedBCF();
-      this.renderRecentFilesTable();
       this.renderRecentBCFTable();
-      this.renderViewsSection();
-      this.renderTeamSection();
+      onFirst();
+    });
+
+    notesPromise.then(notes => {
+      this.allNotes = notes;
       this.renderTimeline();
-      this.attachChartTypeSwitchers();
-      this.hideLoader();
+      this.renderTeamSection();
+      onFirst();
+    });
+
+    viewsPromise.then(views => {
+      this.allViews = views;
+      this.renderViewsSection();
       this.loadThumbnails();
+      onFirst();
+    });
+
+    await Promise.all([filesPromise, topicsPromise, notesPromise, viewsPromise]);
+    this.attachChartTypeSwitchers();
+    this.attachBcfCreatedResolvedPeriod();
+    this.hideLoader();
+    this.saveToCache();
+    logger.info('All data loaded and dashboard rendered');
+  }
+
+  private renderAllSections(): void {
+    this.renderMetrics();
+    this.renderCharts();
+    this.renderBCFAssigneeChart();
+    this.renderTopContributors();
+    this.renderTopUpdatedFiles();
+    this.renderOldestUnresolvedBCF();
+    this.renderRecentFilesTable();
+    this.renderRecentBCFTable();
+    this.renderViewsSection();
+    this.renderTeamSection();
+    this.renderTimeline();
+    this.attachChartTypeSwitchers();
+    this.attachBcfCreatedResolvedPeriod();
+  }
+
+  private async refreshDataInBackground(): Promise<void> {
+    try {
+      const [files, topics, notes, views] = await Promise.all([
+        filesService.getAllFiles().catch(() => this.allFiles),
+        bcfService.getAllTopics().catch(() => this.allTopics),
+        notesService.getActiveNotes().catch(() => this.allNotes),
+        viewsService.getAllViews().catch(() => this.allViews),
+      ]);
+      this.allFiles = files;
+      this.allTopics = topics;
+      this.allNotes = notes;
+      this.allViews = views;
+      this.renderAllSections();
+      this.saveToCache();
+      logger.info('Background refresh complete');
     } catch (error) {
-      this.hideLoader();
-      logger.error('Data load error', { error });
+      logger.warn('Background refresh failed', { error });
     }
   }
 

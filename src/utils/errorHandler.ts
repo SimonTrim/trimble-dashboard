@@ -92,8 +92,8 @@ class ErrorHandler {
    */
   async retry<T>(
     operation: () => Promise<T>,
-    maxAttempts: number = 3,
-    delayMs: number = 1000
+    maxAttempts: number = 1,
+    delayMs: number = 500
   ): Promise<T> {
     let lastError: any;
 

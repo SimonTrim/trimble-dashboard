@@ -174,7 +174,7 @@ class TrimbleClient {
       return await errorHandler.retry(async () => {
         const api = this.getApi();
         return await operation(api);
-      }, 3, 1000);
+      }, 1, 500);
     } catch (error) {
       logger.error(`API operation failed: ${context}`, { error });
       throw errorHandler.handleApiError(error, context);

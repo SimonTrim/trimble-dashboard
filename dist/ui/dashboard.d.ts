@@ -26,7 +26,13 @@ export declare class Dashboard {
     private saveTileConfig;
     private resetTileConfig;
     render(): Promise<void>;
+    private static readonly CACHE_TTL_MS;
+    private getCacheKey;
+    private loadFromCache;
+    private saveToCache;
     private loadAllData;
+    private renderAllSections;
+    private refreshDataInBackground;
     private attachHeaderEvents;
     private applyTileVisibility;
     private initDragDrop;
