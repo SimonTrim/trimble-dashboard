@@ -89,6 +89,79 @@ const lineRevealPlugin = {
 Chart.register(lineRevealPlugin);
 
 /**
+ * Clip-based left-to-right reveal plugin for bar charts.
+ *
+ * Using a growing clip rectangle matches the "wipe-in" behavior of the
+ * reference dashboard more closely than Chart.js's default bar grow
+ * animation, which animates each bar independently.
+ */
+const barRevealPlugin = {
+  id: 'barReveal',
+  defaults: {
+    enabled: false,
+    duration: 1300,
+    delay: 0,
+  },
+  beforeDatasetsDraw(chart: any, _args: any, opts: any): void {
+    if (!opts || !opts.enabled) return;
+
+    const state = chart.$barReveal ?? (chart.$barReveal = {
+      progress: 0,
+      startedAt: null,
+      done: false,
+      clippedThisDraw: false,
+    });
+    state.clippedThisDraw = false;
+    if (state.done) return;
+
+    if (state.startedAt === null) {
+      state.startedAt = performance.now() + (opts.delay || 0);
+    }
+
+    const duration = opts.duration || 1300;
+    const elapsed = performance.now() - state.startedAt;
+
+    if (elapsed < 0) {
+      state.progress = 0;
+    } else if (elapsed >= duration) {
+      state.progress = 1;
+      state.done = true;
+    } else {
+      const t = elapsed / duration;
+      state.progress = 1 - Math.pow(1 - t, 3);
+    }
+
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.beginPath();
+    const width = (chartArea.right - chartArea.left) * state.progress;
+    ctx.rect(
+      chartArea.left - 6,
+      chartArea.top - 14,
+      width + 12,
+      chartArea.bottom - chartArea.top + 28,
+    );
+    ctx.clip();
+    state.clippedThisDraw = true;
+
+    if (!state.done) {
+      requestAnimationFrame(() => {
+        try { chart.draw(); } catch { /* chart destroyed */ }
+      });
+    }
+  },
+  afterDatasetsDraw(chart: any): void {
+    const state = chart.$barReveal;
+    if (state && state.clippedThisDraw) {
+      chart.ctx.restore();
+      state.clippedThisDraw = false;
+    }
+  },
+};
+
+Chart.register(barRevealPlugin);
+
+/**
  * Clip-based rotation reveal plugin for pie / doughnut charts.
  *
  * Why not use Chart.js's built-in `animateRotate`? With a `delay` it's
@@ -153,15 +226,23 @@ const donutRevealPlugin = {
     ctx.save();
     ctx.beginPath();
     if (state.progress <= 0) {
-      // No arc revealed yet — clip to zero-area so arcs are hidden.
       ctx.rect(cx, cy, 0, 0);
     } else {
       ctx.moveTo(cx, cy);
-      // Canvas angle 0 = 3 o'clock; -PI/2 = 12 o'clock. Sweep clockwise.
+      // Fixed wedge reveal from 12 o'clock, with the dataset itself rotating
+      // slightly into place to make the motion unmistakably visible.
       ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + state.progress * 2 * Math.PI);
       ctx.closePath();
     }
     ctx.clip();
+
+    const rotationOffset = (1 - state.progress) * Math.PI * 1.15;
+    const scale = 0.92 + (state.progress * 0.08);
+    ctx.translate(cx, cy);
+    ctx.rotate(rotationOffset);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+    ctx.globalAlpha = 0.35 + (state.progress * 0.65);
     state.clippedThisDraw = true;
 
     requestAnimationFrame(() => {
@@ -244,18 +325,19 @@ function getBaseOpts() {
 }
 
 /**
- * Animation config for bar charts:
- * Each bar appears with a delay based on its index, creating a left-to-right sweep.
+ * Returns options configured for the clip-based bar reveal plugin.
+ * Bars are fully drawn by Chart.js and revealed with a smooth wipe from the
+ * left edge, matching the progressive behavior of the line charts.
  */
-function getBarAnimation(startDelay: number = 0): any {
+function withBarReveal(opts: any, startDelay: number = 0, duration: number = 1300): any {
+  const basePlugins = (opts && opts.plugins) || {};
   return {
-    duration: 700,
-    easing: 'easeOutCubic',
-    delay: (context: any) => {
-      if (context.type === 'data' && context.mode === 'default' && !context.dropped) {
-        return startDelay + context.dataIndex * 45;
-      }
-      return startDelay;
+    ...opts,
+    animation: { duration: 0 },
+    animations: { colors: false, numbers: false },
+    plugins: {
+      ...basePlugins,
+      barReveal: { enabled: true, duration, delay: startDelay },
     },
   };
 }
@@ -324,14 +406,6 @@ export class ChartsManager {
   }
 
   /**
-   * Returns the provided animation config when animations are enabled,
-   * or `false` (Chart.js "no animation") otherwise.
-   */
-  private anim(animation: any): any {
-    return this.animationsEnabled ? animation : false;
-  }
-
-  /**
    * Line reveal helper: returns a smooth-reveal config when animations are
    * enabled, or a plain no-animation config during silent refresh.
    */
@@ -351,25 +425,52 @@ export class ChartsManager {
       : withAnimation(opts, false);
   }
 
+  /**
+   * Bar reveal helper: returns the same left-to-right wipe style used by the
+   * line charts, or disables animation entirely during silent refresh.
+   */
+  private barOpts(opts: any, startDelay: number = 0, duration: number = 1300): any {
+    return this.animationsEnabled
+      ? withBarReveal(opts, startDelay, duration)
+      : withAnimation(opts, false);
+  }
+
   private destroyChart(key: string): void {
     const c = this.charts.get(key);
     if (c) { c.destroy(); this.charts.delete(key); }
   }
 
-  private setChart(key: string, chart: Chart): void {
-    this.charts.set(key, chart);
+  /**
+   * During silent background refresh we update matching charts in place to
+   * avoid the visible "flash / reload" caused by destroy+recreate.
+   */
+  private mountChart(key: string, ctx: CanvasRenderingContext2D, config: any): void {
+    const existing = this.charts.get(key);
+    const canUpdateInPlace = !this.animationsEnabled
+      && !!existing
+      && existing.canvas === ctx.canvas
+      && (existing.config as any).type === config.type;
+
+    if (canUpdateInPlace && existing) {
+      existing.data = config.data;
+      existing.options = config.options;
+      existing.update('none');
+      return;
+    }
+
+    this.destroyChart(key);
+    this.charts.set(key, new Chart(ctx, config));
   }
 
   createBCFChart(canvasId: string, data: BCFStatusData, startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
-      this.destroyChart('bcf');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const tc = themeColors();
 
-      const chart = new Chart(ctx, {
+      this.mountChart('bcf', ctx, {
         type: 'bar',
         data: {
           labels: ['Open', 'In Progress', 'Resolved', 'Closed'],
@@ -383,7 +484,7 @@ export class ChartsManager {
           }],
         },
         options: {
-          ...withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay))),
+          ...this.barOpts(getBaseOpts(), startDelay),
           plugins: { ...getBaseOpts().plugins, legend: { display: false } },
           scales: {
             y: { beginAtZero: true, ticks: { stepSize: 1, color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } },
@@ -391,7 +492,6 @@ export class ChartsManager {
           },
         },
       });
-      this.setChart('bcf', chart);
     } catch (error) { logger.error('Error creating BCF chart', { error }); }
   }
 
@@ -399,7 +499,6 @@ export class ChartsManager {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
-      this.destroyChart('bcfPriority');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const total = data.high + data.medium + data.low;
@@ -410,15 +509,14 @@ export class ChartsManager {
       const pctCallback = (ctx: any) => { const v = ctx.parsed || ctx.parsed.y; const pct = total > 0 ? Math.round(((typeof v === 'number' ? v : ctx.parsed) / total) * 100) : 0; return ` ${ctx.label}: ${typeof v === 'number' ? v : ctx.parsed} (${pct}%)`; };
 
       if (chartType === 'bar') {
-        const chart = new Chart(ctx, {
+        this.mountChart('bcfPriority', ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Topics', data: values, backgroundColor: colors, borderRadius: 8, borderSkipped: false, barPercentage: 0.55 }] },
-          options: { ...withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay))), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+          options: { ...this.barOpts(getBaseOpts(), startDelay), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
         });
-        this.setChart('bcfPriority', chart);
       } else {
         const baseCircular = this.donutOpts(getBaseOpts(), startDelay);
-        const chart = new Chart(ctx, {
+        this.mountChart('bcfPriority', ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
           options: {
@@ -431,7 +529,6 @@ export class ChartsManager {
             },
           },
         });
-        this.setChart('bcfPriority', chart);
       }
     } catch (error) { logger.error('Error creating BCF priority chart', { error }); }
   }
@@ -440,7 +537,6 @@ export class ChartsManager {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
-      this.destroyChart('filesTrend');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const tc = themeColors();
@@ -460,7 +556,7 @@ export class ChartsManager {
         gradient.addColorStop(1, 'rgba(0, 99, 163, 0)');
       }
 
-      const chart = new Chart(ctx, {
+      this.mountChart('filesTrend', ctx, {
         type: 'line',
         data: {
           labels,
@@ -489,7 +585,6 @@ export class ChartsManager {
           },
         },
       });
-      this.setChart('filesTrend', chart);
     } catch (error) { logger.error('Error creating files trend chart', { error }); }
   }
 
@@ -497,7 +592,6 @@ export class ChartsManager {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
-      this.destroyChart('fileType');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const tc = themeColors();
@@ -515,15 +609,14 @@ export class ChartsManager {
       const pctCallback = (ctx: any) => { const v = ctx.parsed || ctx.parsed.y; const pct = total > 0 ? Math.round(((typeof v === 'number' ? v : ctx.parsed) / total) * 100) : 0; return ` ${ctx.label}: ${typeof v === 'number' ? v : ctx.parsed} (${pct}%)`; };
 
       if (chartType === 'bar') {
-        const chart = new Chart(ctx, {
+        this.mountChart('fileType', ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Fichiers', data: counts, backgroundColor: colors, borderRadius: 6, borderSkipped: false, barPercentage: 0.6 }] },
-          options: { ...withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay))), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 10 }, maxRotation: 45 }, grid: { display: false }, border: { display: false } } } },
+          options: { ...this.barOpts(getBaseOpts(), startDelay), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 10 }, maxRotation: 45 }, grid: { display: false }, border: { display: false } } } },
         });
-        this.setChart('fileType', chart);
       } else {
         const baseCircular = this.donutOpts(getBaseOpts(), startDelay);
-        const chart = new Chart(ctx, {
+        this.mountChart('fileType', ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0, spacing: 2 }] },
           options: {
@@ -536,7 +629,6 @@ export class ChartsManager {
             },
           },
         });
-        this.setChart('fileType', chart);
       }
     } catch (error) { logger.error('Error creating file type chart', { error }); }
   }
@@ -545,7 +637,6 @@ export class ChartsManager {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
-      this.destroyChart('cumulative');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const tc = themeColors();
@@ -583,10 +674,10 @@ export class ChartsManager {
       };
 
       const animOpts = chartType === 'bar'
-        ? withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay)))
+        ? this.barOpts(getBaseOpts(), startDelay)
         : this.lineOpts(getBaseOpts(), startDelay);
 
-      const chart = new Chart(ctx, {
+      this.mountChart('cumulative', ctx, {
         type: chartType as any,
         data: { labels: data.map(d => d.label), datasets: [dataset as any] },
         options: {
@@ -603,7 +694,6 @@ export class ChartsManager {
           },
         },
       });
-      this.setChart('cumulative', chart);
     } catch (error) { logger.error('Error creating cumulative chart', { error }); }
   }
 
@@ -611,7 +701,6 @@ export class ChartsManager {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
-      this.destroyChart('depositFreq');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const tc = themeColors();
@@ -638,9 +727,9 @@ export class ChartsManager {
 
       const animOpts = chartType === 'line'
         ? this.lineOpts(getBaseOpts(), startDelay)
-        : withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay)));
+        : this.barOpts(getBaseOpts(), startDelay);
 
-      const chart = new Chart(ctx, {
+      this.mountChart('depositFreq', ctx, {
         type: chartType as any,
         data: { labels: data.map(d => d.label), datasets: [dataset as any] },
         options: {
@@ -652,7 +741,6 @@ export class ChartsManager {
           },
         },
       });
-      this.setChart('depositFreq', chart);
     } catch (error) { logger.error('Error creating deposit frequency chart', { error }); }
   }
 
@@ -660,12 +748,11 @@ export class ChartsManager {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
-      this.destroyChart('bcfCreatedResolved');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const tc = themeColors();
 
-      const chart = new Chart(ctx, {
+      this.mountChart('bcfCreatedResolved', ctx, {
         type: 'line',
         data: {
           labels: data.map(d => d.label),
@@ -705,7 +792,6 @@ export class ChartsManager {
           },
         },
       });
-      this.setChart('bcfCreatedResolved', chart);
     } catch (error) { logger.error('Error creating BCF created/resolved chart', { error }); }
   }
 
@@ -713,7 +799,6 @@ export class ChartsManager {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
-      this.destroyChart('bcfStatusDonut');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const tc = themeColors();
@@ -724,15 +809,14 @@ export class ChartsManager {
       const pctCallback = (ctx: any) => { const v = ctx.parsed || ctx.parsed.y; const pct = total > 0 ? Math.round(((typeof v === 'number' ? v : ctx.parsed) / total) * 100) : 0; return ` ${ctx.label}: ${typeof v === 'number' ? v : ctx.parsed} (${pct}%)`; };
 
       if (chartType === 'bar') {
-        const chart = new Chart(ctx, {
+        this.mountChart('bcfStatusDonut', ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Topics', data: values, backgroundColor: colors, borderRadius: 8, borderSkipped: false, barPercentage: 0.55 }] },
-          options: { ...withAnimation(getBaseOpts(), this.anim(getBarAnimation(startDelay))), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+          options: { ...this.barOpts(getBaseOpts(), startDelay), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
         });
-        this.setChart('bcfStatusDonut', chart);
       } else {
         const baseCircular = this.donutOpts(getBaseOpts(), startDelay);
-        const chart = new Chart(ctx, {
+        this.mountChart('bcfStatusDonut', ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
           options: {
@@ -745,7 +829,6 @@ export class ChartsManager {
             },
           },
         });
-        this.setChart('bcfStatusDonut', chart);
       }
     } catch (error) { logger.error('Error creating BCF status donut chart', { error }); }
   }

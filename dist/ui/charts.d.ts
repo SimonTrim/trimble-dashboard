@@ -13,11 +13,6 @@ export declare class ChartsManager {
      */
     setAnimationsEnabled(enabled: boolean): void;
     /**
-     * Returns the provided animation config when animations are enabled,
-     * or `false` (Chart.js "no animation") otherwise.
-     */
-    private anim;
-    /**
      * Line reveal helper: returns a smooth-reveal config when animations are
      * enabled, or a plain no-animation config during silent refresh.
      */
@@ -27,8 +22,17 @@ export declare class ChartsManager {
      * are enabled, or a plain no-animation config during silent refresh.
      */
     private donutOpts;
+    /**
+     * Bar reveal helper: returns the same left-to-right wipe style used by the
+     * line charts, or disables animation entirely during silent refresh.
+     */
+    private barOpts;
     private destroyChart;
-    private setChart;
+    /**
+     * During silent background refresh we update matching charts in place to
+     * avoid the visible "flash / reload" caused by destroy+recreate.
+     */
+    private mountChart;
     createBCFChart(canvasId: string, data: BCFStatusData, startDelay?: number): void;
     createBCFPriorityChart(canvasId: string, data: BCFPriorityData, chartType?: string, startDelay?: number): void;
     createFilesTrendChart(canvasId: string, data: FileTrendDataPoint[], startDelay?: number): void;

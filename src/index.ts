@@ -182,7 +182,7 @@ function createSidebarMenu(): void {
 
   const mainMenuObject = {
     title: 'Dashboard',
-    icon: 'https://simontrim.github.io/trimble-dashboard/public/icon-white-48.png',
+    icon: 'https://simontrim.github.io/trimble-dashboard/new_icon_dashboard.png',
     command: 'show_dashboard',
   };
 

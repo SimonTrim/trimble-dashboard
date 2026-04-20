@@ -80,6 +80,8 @@ export declare class Dashboard {
     private renderCharts;
     private renderCumulativeChart;
     private renderDepositFrequencyChart;
+    private startOfIsoWeek;
+    private getAvailableBcfWeeks;
     private renderBCFCreatedResolvedChart;
     private attachBcfCreatedResolvedPeriod;
     private renderBCFAssigneeChart;
@@ -112,6 +114,7 @@ export declare class Dashboard {
     private rerenderChart;
     private getCumulativeData;
     private getDepositFreqData;
+    private bcfCreatedResolvedPeriodSwitcher;
     private getTemplate;
     private metricHtml;
 }

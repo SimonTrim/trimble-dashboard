@@ -588,8 +588,7 @@ export class Dashboard {
 
     this.chartsManager.createBCFStatusDonutChart('bcf-status-donut-canvas', s, 'doughnut', this.getCircularChartDelay('bcf-status-donut'));
     this.chartsManager.createBCFPriorityChart('bcf-priority-canvas', p, 'doughnut', this.getCircularChartDelay('bcf-priority-chart'));
-    this.renderBCFCreatedResolvedChart(7);
-    this.attachBcfCreatedResolvedPeriod();
+    this.renderBCFCreatedResolvedChart('7w');
   }
 
   /**
@@ -637,18 +636,43 @@ export class Dashboard {
     this.chartsManager.createDepositFrequencyChart('deposit-freq-canvas', weeks, 'bar', this.getTileStartDelay('deposit-freq-chart'));
   }
 
-  private renderBCFCreatedResolvedChart(days: number, withStagger: boolean = true): void {
-    const now = new Date();
-    const data: { label: string; created: number; resolved: number }[] = [];
-    const step = days <= 14 ? 1 : 7;
-    const periods = Math.min(days, 30);
+  private startOfIsoWeek(date: Date): Date {
+    const normalized = new Date(date);
+    const day = normalized.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    normalized.setDate(normalized.getDate() + diff);
+    normalized.setHours(0, 0, 0, 0);
+    return normalized;
+  }
 
-    for (let i = periods - 1; i >= 0; i -= step) {
-      const start = new Date(now);
-      start.setDate(start.getDate() - i);
-      start.setHours(0, 0, 0, 0);
+  private getAvailableBcfWeeks(): number {
+    const timestamps = this.allTopics.flatMap(topic => {
+      const values: number[] = [];
+      const created = new Date(topic.createdAt).getTime();
+      if (!Number.isNaN(created)) values.push(created);
+      const modified = new Date(topic.modifiedAt).getTime();
+      if (!Number.isNaN(modified)) values.push(modified);
+      return values;
+    });
+
+    if (!timestamps.length) return 1;
+
+    const earliestWeek = this.startOfIsoWeek(new Date(Math.min(...timestamps)));
+    const currentWeek = this.startOfIsoWeek(new Date());
+    const diffMs = currentWeek.getTime() - earliestWeek.getTime();
+    return Math.max(1, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1);
+  }
+
+  private renderBCFCreatedResolvedChart(period: '7w' | 'all' = '7w', withStagger: boolean = true): void {
+    const currentWeek = this.startOfIsoWeek(new Date());
+    const weeksToRender = period === 'all' ? this.getAvailableBcfWeeks() : 7;
+    const data: { label: string; created: number; resolved: number }[] = [];
+
+    for (let i = weeksToRender - 1; i >= 0; i--) {
+      const start = new Date(currentWeek);
+      start.setDate(start.getDate() - (i * 7));
       const end = new Date(start);
-      end.setDate(end.getDate() + step);
+      end.setDate(end.getDate() + 7);
 
       const created = this.allTopics.filter(t => {
         const d = new Date(t.createdAt);
@@ -668,9 +692,13 @@ export class Dashboard {
 
   private attachBcfCreatedResolvedPeriod(): void {
     document.querySelectorAll('.bcf-cr-period-btn').forEach(btn => {
+      const boundBtn = btn as HTMLButtonElement;
+      if (boundBtn.dataset.bound === 'true') return;
+      boundBtn.dataset.bound = 'true';
       btn.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        const period = parseInt(target.dataset.period || '7', 10);
+        const target = e.currentTarget as HTMLButtonElement;
+        const period = (target.dataset.period as '7w' | 'all' | undefined) || '7w';
+        if (target.classList.contains('active')) return;
         document.querySelectorAll('.bcf-cr-period-btn').forEach(b => b.classList.remove('active'));
         target.classList.add('active');
         this.renderBCFCreatedResolvedChart(period, false);
@@ -702,7 +730,7 @@ export class Dashboard {
       const pct = max > 0 ? Math.round((count / max) * 100) : 0;
       return `<div class="hbar-item">
         <span class="hbar-label" title="${this.esc(name)}">${this.esc(name)}</span>
-        <div class="hbar-bar-wrapper"><div class="hbar-bar" style="width:${pct}%;background:${barColors[i % barColors.length]}"></div></div>
+        <div class="hbar-bar-wrapper"><div class="hbar-bar" style="width:${pct}%;background:${barColors[i % barColors.length]};--reveal-delay:${Math.min(540, i * 70)}ms"></div></div>
         <span class="hbar-value">${count}</span>
       </div>`;
     }).join('');
@@ -733,7 +761,7 @@ export class Dashboard {
       return `<div class="hbar-item">
         <span class="hbar-rank">${i + 1}</span>
         <span class="hbar-label" title="${this.esc(name)}">${this.esc(name)}</span>
-        <div class="hbar-bar-wrapper"><div class="hbar-bar" style="width:${pct}%;background:#0ea5e9"></div></div>
+        <div class="hbar-bar-wrapper"><div class="hbar-bar" style="width:${pct}%;background:#0ea5e9;--reveal-delay:${Math.min(540, i * 70)}ms"></div></div>
         <span class="hbar-value">${count}</span>
       </div>`;
     }).join('');
@@ -779,7 +807,7 @@ export class Dashboard {
       return `<tr>
         <td style="width:2rem;text-align:center;font-weight:700;color:var(--muted-foreground)">${i + 1}</td>
         <td><span class="badge-ext ${ext || 'default'}">${ext || '?'}</span> <span class="file-name" title="${this.esc(name)}">${this.esc(this.truncate(name, 80))}</span></td>
-        <td style="width:8rem"><div class="version-bar"><div class="version-bar-fill" style="width:${pct}%;background:${color}"></div><span class="version-bar-label">${count}v</span></div></td>
+        <td style="width:8rem"><div class="version-bar"><div class="version-bar-fill" style="width:${pct}%;background:${color};--reveal-delay:${Math.min(700, i * 55)}ms"></div><span class="version-bar-label">${count}v</span></div></td>
       </tr>`;
     }).join('');
   }
@@ -1088,11 +1116,15 @@ export class Dashboard {
 
   private attachChartTypeSwitchers(): void {
     document.querySelectorAll('.chart-type-btn').forEach(btn => {
+      const boundBtn = btn as HTMLButtonElement;
+      if (boundBtn.dataset.bound === 'true') return;
+      boundBtn.dataset.bound = 'true';
       btn.addEventListener('click', (e) => {
-        const target = e.currentTarget as HTMLElement;
+        const target = e.currentTarget as HTMLButtonElement;
         const chartId = target.dataset.chartId;
         const chartType = target.dataset.chartType;
         if (!chartId || !chartType) return;
+        if (target.classList.contains('active')) return;
 
         const container = target.closest('.chart-type-switcher');
         if (container) {
@@ -1168,6 +1200,30 @@ export class Dashboard {
     return weeks;
   }
 
+  private bcfCreatedResolvedPeriodSwitcher(): string {
+    return `<div class="bcf-cr-period-switcher" aria-label="Période du graphique BCF créés vs résolus">
+      <button class="bcf-cr-period-btn active" type="button" data-period="7w" title="Afficher les 7 dernières semaines">
+        <span class="bcf-cr-period-btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3.5" width="12" height="10" rx="2"></rect>
+            <path d="M5 2v3M11 2v3M2 6.5h12"></path>
+          </svg>
+        </span>
+        <span class="bcf-cr-period-btn-label">7 sem.</span>
+      </button>
+      <button class="bcf-cr-period-btn" type="button" data-period="all" title="Afficher toute la période disponible">
+        <span class="bcf-cr-period-btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.5 8h11"></path>
+            <path d="M9.75 3.5 13.5 8l-3.75 4.5"></path>
+            <path d="M2.5 4.5v7"></path>
+          </svg>
+        </span>
+        <span class="bcf-cr-period-btn-label">Tout</span>
+      </button>
+    </div>`;
+  }
+
   // =============================================
   // HTML TEMPLATE
   // =============================================
@@ -1190,7 +1246,7 @@ export class Dashboard {
       'cumulative-chart': `<div class="card"><div class="card-header"><h3>Fichiers déposés — évolution cumulatif</h3>${this.chartTypeSwitcher('cumulative', ['line', 'bar'])}</div><div class="card-content"><div class="chart-container chart-tall"><canvas id="cumulative-canvas"></canvas></div></div></div>`,
       'deposit-freq-chart': `<div class="card"><div class="card-header"><h3>Fréquence de dépôt (26 dernières semaines)</h3>${this.chartTypeSwitcher('deposit-freq', ['bar', 'line'])}</div><div class="card-content"><div class="chart-container chart-tall"><canvas id="deposit-freq-canvas"></canvas></div></div></div>`,
       'bcf-status-donut': `<div class="card"><div class="card-header"><h3>BCF par statut</h3>${this.chartTypeSwitcher('bcf-status', ['doughnut', 'bar', 'pie'])}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-status-donut-canvas"></canvas></div></div></div>`,
-      'bcf-created-resolved': `<div class="card"><div class="card-header"><h3>BCF créés vs résolus dans le temps</h3><div class="chart-period-tabs"><button class="bcf-cr-period-btn active" data-period="7">7 sem.</button><button class="bcf-cr-period-btn" data-period="30">Tout</button></div></div><div class="card-content"><div class="chart-container"><canvas id="bcf-created-resolved-canvas"></canvas></div></div></div>`,
+      'bcf-created-resolved': `<div class="card"><div class="card-header"><h3>BCF créés vs résolus dans le temps</h3>${this.bcfCreatedResolvedPeriodSwitcher()}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-created-resolved-canvas"></canvas></div></div></div>`,
       'bcf-priority-chart': `<div class="card"><div class="card-header"><h3>BCF par priorité</h3>${this.chartTypeSwitcher('bcf-priority', ['doughnut', 'bar', 'pie'])}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-priority-canvas"></canvas></div></div></div>`,
       'bcf-assignee-chart': `<div class="card"><div class="card-header"><h3>BCF par personne assignée</h3><span class="card-icon"><i class="modus-icon mi-people-group"></i></span></div><div class="card-content"><div id="bcf-assignee-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
       'filetype-chart': `<div class="card"><div class="card-header"><h3>Fichiers par type</h3>${this.chartTypeSwitcher('filetype', ['pie', 'doughnut', 'bar'])}</div><div class="card-content"><div class="chart-container"><canvas id="filetype-canvas"></canvas></div></div></div>`,

@@ -595,30 +595,62 @@ body {
 
 .chart-container.chart-tall { height: 280px; }
 
-.chart-period-tabs {
-  display: flex;
+.bcf-cr-period-switcher {
+  display: inline-flex;
+  align-items: center;
   gap: 0.25rem;
   background: var(--muted);
-  border-radius: var(--radius-sm);
-  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  margin-inline-start: auto;
 }
-.chart-period-btn {
-  padding: 0.25rem 0.75rem;
+
+.bcf-cr-period-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.6875rem;
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--muted-foreground);
   background: transparent;
   border: none;
-  border-radius: calc(var(--radius-sm) - 2px);
+  border-radius: 999px;
   cursor: pointer;
   font-family: var(--font-sans);
-  transition: all 0.15s;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.2s ease, transform 0.15s ease;
   white-space: nowrap;
 }
-.chart-period-btn:hover { color: var(--foreground); }
-.chart-period-btn.active {
+
+.bcf-cr-period-btn:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--card) 75%, transparent);
+}
+
+.bcf-cr-period-btn:active {
+  transform: translateY(1px);
+}
+
+.bcf-cr-period-btn.active {
   background: var(--trimble-primary);
   color: white;
+  box-shadow: 0 6px 18px rgba(0, 99, 163, 0.22);
+}
+
+.bcf-cr-period-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bcf-cr-period-btn-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.bcf-cr-period-btn-label {
+  line-height: 1;
 }
 
 .chart-type-switcher {
@@ -890,6 +922,8 @@ body {
   border-radius: 4px;
   transform-origin: left center;
   animation: hbar-grow 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--reveal-delay, 0ms);
+  will-change: transform, opacity;
 }
 
 @keyframes hbar-grow {
@@ -900,6 +934,8 @@ body {
 .version-bar-fill {
   transform-origin: left center;
   animation: hbar-grow 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--reveal-delay, 0ms);
+  will-change: transform, opacity;
 }
 .hbar-value {
   min-width: 2rem;
@@ -1174,7 +1210,7 @@ body {
   .dashboard-header { flex-direction: column; gap: 0.75rem; text-align: center; }
   .bcf-detail-grid { grid-template-columns: 1fr; }
   .bcf-detail-fields { grid-template-columns: 1fr; }
-  .chart-period-tabs { flex-wrap: wrap; }
+  .bcf-cr-period-switcher { flex-wrap: wrap; justify-content: center; }
   .hbar-label { width: 6rem; }
 }
 
@@ -1264,7 +1300,7 @@ body {
   transition: box-shadow 0.3s ease, transform 0.3s ease;
 }
 
-[data-theme="dark"] .hbar-row:hover .hbar-bar {
+[data-theme="dark"] .hbar-item:hover .hbar-bar {
   box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
   transform: scaleX(1.02);
   transform-origin: left;

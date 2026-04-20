@@ -1,5 +1,5 @@
 {
-  "icon": "https://simontrim.github.io/trimble-dashboard/public/icon-48.png",
+  "icon": "https://simontrim.github.io/trimble-dashboard/new_icon_dashboard.png",
   "title": "Dashboard v2",
   "url": "https://simontrim.github.io/trimble-dashboard/public/index.html?v=2",
   "description": "Dashboard avec logs de debug Workspace API",
