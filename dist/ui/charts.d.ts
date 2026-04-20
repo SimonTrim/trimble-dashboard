@@ -22,6 +22,11 @@ export declare class ChartsManager {
      * enabled, or a plain no-animation config during silent refresh.
      */
     private lineOpts;
+    /**
+     * Donut reveal helper: returns a smooth wedge-clip config when animations
+     * are enabled, or a plain no-animation config during silent refresh.
+     */
+    private donutOpts;
     private destroyChart;
     private setChart;
     createBCFChart(canvasId: string, data: BCFStatusData, startDelay?: number): void;

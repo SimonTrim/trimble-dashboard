@@ -88,6 +88,97 @@ const lineRevealPlugin = {
 
 Chart.register(lineRevealPlugin);
 
+/**
+ * Clip-based rotation reveal plugin for pie / doughnut charts.
+ *
+ * Why not use Chart.js's built-in `animateRotate`? With a `delay` it's
+ * inconsistent: Chart.js can draw the final rotated state immediately and
+ * skip the interpolation entirely when the options object changes between
+ * creation and first draw (which happens on our dashboard because the tile
+ * fade-in CSS runs concurrently). The user then sees no rotation at all.
+ *
+ * This plugin takes full control: Chart.js draws the final doughnut on every
+ * frame, and we wrap `beforeDatasetsDraw` with a pie-slice clip that expands
+ * from the 12 o'clock position clockwise. The reveal is guaranteed visible,
+ * smooth over the full duration, and independent of Chart.js's internal
+ * animation pipeline.
+ */
+const donutRevealPlugin = {
+  id: 'donutReveal',
+  defaults: {
+    enabled: false,
+    duration: 2000,
+    delay: 0,
+  },
+  beforeDatasetsDraw(chart: any, _args: any, opts: any): void {
+    if (!opts || !opts.enabled) return;
+
+    const state = chart.$donutReveal ?? (chart.$donutReveal = {
+      progress: 0,
+      startedAt: null,
+      done: false,
+      clippedThisDraw: false,
+    });
+    state.clippedThisDraw = false;
+    if (state.done) return;
+
+    if (state.startedAt === null) {
+      state.startedAt = performance.now() + (opts.delay || 0);
+    }
+
+    const duration = opts.duration || 2000;
+    const elapsed = performance.now() - state.startedAt;
+
+    if (elapsed < 0) {
+      state.progress = 0;
+    } else if (elapsed >= duration) {
+      state.progress = 1;
+      state.done = true;
+      return;
+    } else {
+      const t = elapsed / duration;
+      state.progress = 1 - Math.pow(1 - t, 3);
+    }
+
+    const { ctx, chartArea } = chart;
+    const cx = (chartArea.left + chartArea.right) / 2;
+    const cy = (chartArea.top + chartArea.bottom) / 2;
+    // Radius must cover the entire chart area diagonally so the clip wedge
+    // can never be smaller than the drawn arcs.
+    const r = Math.ceil(Math.hypot(
+      chartArea.right - chartArea.left,
+      chartArea.bottom - chartArea.top,
+    )) + 20;
+
+    ctx.save();
+    ctx.beginPath();
+    if (state.progress <= 0) {
+      // No arc revealed yet — clip to zero-area so arcs are hidden.
+      ctx.rect(cx, cy, 0, 0);
+    } else {
+      ctx.moveTo(cx, cy);
+      // Canvas angle 0 = 3 o'clock; -PI/2 = 12 o'clock. Sweep clockwise.
+      ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + state.progress * 2 * Math.PI);
+      ctx.closePath();
+    }
+    ctx.clip();
+    state.clippedThisDraw = true;
+
+    requestAnimationFrame(() => {
+      try { chart.draw(); } catch { /* chart destroyed */ }
+    });
+  },
+  afterDatasetsDraw(chart: any): void {
+    const state = chart.$donutReveal;
+    if (state && state.clippedThisDraw) {
+      chart.ctx.restore();
+      state.clippedThisDraw = false;
+    }
+  },
+};
+
+Chart.register(donutRevealPlugin);
+
 function isDark(): boolean {
   return document.documentElement.getAttribute('data-theme') === 'dark';
 }
@@ -153,33 +244,6 @@ function getBaseOpts() {
 }
 
 /**
- * Animation config for circular charts (pie / doughnut).
- *
- * Sweeps cleanly from 0° to 360° over 2 seconds. `animateScale` is disabled
- * so the rotation is clearly visible — otherwise arcs grow from center while
- * rotating, which hides the sweep effect.
- *
- * `startDelay` must be set so the sweep starts AFTER the tile finishes its
- * CSS fade-in. If the rotation runs while the tile is still invisible (or
- * fading in with a fast easing), the user sees almost no movement — which
- * was exactly what was happening on first load.
- *
- * IMPORTANT: we deliberately do NOT set `animations: undefined` in the chart
- * options (see `withAnimation` below). Chart.js drives the doughnut rotation
- * through its default `animations.numbers` config on `startAngle` / `endAngle`
- * — blowing those defaults away silently disables the rotation.
- */
-function getCircularAnimation(startDelay: number = 0) {
-  return {
-    duration: 2000,
-    delay: startDelay,
-    easing: 'easeOutCubic' as const,
-    animateRotate: true,
-    animateScale: false,
-  };
-}
-
-/**
  * Animation config for bar charts:
  * Each bar appears with a delay based on its index, creating a left-to-right sweep.
  */
@@ -224,6 +288,28 @@ function withLineReveal(opts: any, startDelay: number = 0, duration: number = 14
   };
 }
 
+/**
+ * Returns options configured for the clip-based donut/pie reveal plugin.
+ * Chart.js's own rotation animation is disabled so only our wedge-clip reveal
+ * plays, giving a guaranteed, smooth 0 -> 360 degrees sweep.
+ */
+function withDonutReveal(
+  opts: any,
+  startDelay: number = 0,
+  duration: number = 2000,
+): any {
+  const basePlugins = (opts && opts.plugins) || {};
+  return {
+    ...opts,
+    animation: { duration: 0, animateRotate: false, animateScale: false },
+    animations: { colors: false, numbers: false },
+    plugins: {
+      ...basePlugins,
+      donutReveal: { enabled: true, duration, delay: startDelay },
+    },
+  };
+}
+
 export class ChartsManager {
   private charts: Map<string, Chart> = new Map();
   private animationsEnabled: boolean = true;
@@ -252,6 +338,16 @@ export class ChartsManager {
   private lineOpts(opts: any, startDelay: number = 0, duration: number = 1400): any {
     return this.animationsEnabled
       ? withLineReveal(opts, startDelay, duration)
+      : withAnimation(opts, false);
+  }
+
+  /**
+   * Donut reveal helper: returns a smooth wedge-clip config when animations
+   * are enabled, or a plain no-animation config during silent refresh.
+   */
+  private donutOpts(opts: any, startDelay: number = 0, duration: number = 2000): any {
+    return this.animationsEnabled
+      ? withDonutReveal(opts, startDelay, duration)
       : withAnimation(opts, false);
   }
 
@@ -321,10 +417,19 @@ export class ChartsManager {
         });
         this.setChart('bcfPriority', chart);
       } else {
+        const baseCircular = this.donutOpts(getBaseOpts(), startDelay);
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
-          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation(startDelay))), cutout: chartType === 'doughnut' ? '68%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: {
+            ...baseCircular,
+            cutout: chartType === 'doughnut' ? '68%' : undefined,
+            plugins: {
+              ...baseCircular.plugins,
+              legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { size: 12 }, color: tc.muted } },
+              tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } },
+            },
+          },
         });
         this.setChart('bcfPriority', chart);
       }
@@ -417,10 +522,19 @@ export class ChartsManager {
         });
         this.setChart('fileType', chart);
       } else {
+        const baseCircular = this.donutOpts(getBaseOpts(), startDelay);
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0, spacing: 2 }] },
-          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation(startDelay))), cutout: chartType === 'doughnut' ? '60%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: {
+            ...baseCircular,
+            cutout: chartType === 'doughnut' ? '60%' : undefined,
+            plugins: {
+              ...baseCircular.plugins,
+              legend: { position: 'right', labels: { padding: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11 }, color: tc.muted } },
+              tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } },
+            },
+          },
         });
         this.setChart('fileType', chart);
       }
@@ -617,10 +731,19 @@ export class ChartsManager {
         });
         this.setChart('bcfStatusDonut', chart);
       } else {
+        const baseCircular = this.donutOpts(getBaseOpts(), startDelay);
         const chart = new Chart(ctx, {
           type: chartType as any,
           data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, spacing: 3 }] },
-          options: { ...withAnimation(getBaseOpts(), this.anim(getCircularAnimation(startDelay))), cutout: chartType === 'doughnut' ? '65%' : undefined, plugins: { ...getBaseOpts().plugins, legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } } },
+          options: {
+            ...baseCircular,
+            cutout: chartType === 'doughnut' ? '65%' : undefined,
+            plugins: {
+              ...baseCircular.plugins,
+              legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: tc.muted } },
+              tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } },
+            },
+          },
         });
         this.setChart('bcfStatusDonut', chart);
       }

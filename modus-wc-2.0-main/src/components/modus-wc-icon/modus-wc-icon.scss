@@ -1,0 +1,31 @@
+modus-wc-icon .modus-icons,
+modus-wc-icon .modus-icons-outlined,
+modus-wc-icon .modus-icons-solid {
+  &.modus-wc-icon--xs {
+    font-size: 1rem;
+  }
+
+  &.modus-wc-icon--sm {
+    font-size: 1.25rem;
+  }
+
+  &.modus-wc-icon--md {
+    font-size: 1.5rem;
+  }
+
+  &.modus-wc-icon--lg {
+    font-size: 2rem;
+  }
+
+  &.modus-wc-icon--xl {
+    font-size: 4rem;
+  }
+}
+
+modus-wc-icon {
+  // Generic icon font support for all icon libraries
+  i::before,
+  i::after {
+    font-family: inherit !important;
+  }
+}

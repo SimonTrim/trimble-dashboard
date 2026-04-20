@@ -1,0 +1,73 @@
+# Releasing Modus Web Components
+
+This document outlines the steps to release a new version of the Modus Web Components library using the automated GitHub Actions workflows.
+
+## Prerequisites
+
+Ensure you have the necessary permissions to run the publishing workflow.
+
+## Release Process
+
+### 1. Prepare for Release
+
+Ensure that all changes intended for the release are merged into the branch you are releasing from (`main`). This includes:
+
+- Code changes
+- Documentation updates
+
+### 2. Trigger the Publish Workflow
+
+1. Go to the `Actions` tab of the GitHub repository.
+2. Select the pinned [Publish & Release](https://github.com/trimble-oss/modus-wc-2.0/actions/workflows/publish.yml) workflow at the top.
+3. Click on the `Run workflow` button to the right.
+4. Provide the new version number as input and start the workflow.
+
+### 3. Verify the Release
+
+After the workflow completes, verify that the following have been successfully published:
+
+- The `@trimble-oss/moduswebcomponents` package to the npm registry.
+- The `@trimble-oss/moduswebcomponents-react` package to the npm registry.
+- The `@trimble-oss/moduswebcomponents-angular` package to the npm registry.
+- The [GitHub releases](https://github.com/trimble-oss/modus-wc-2.0/releases) for all three packages.
+
+That's it! :octocat:
+
+## GitHub Workflow Breakdown
+
+```mermaid
+graph LR
+    A[Manual Trigger with Version ⟮and branch⟯ Input] --> B(build-and-publish-wc)
+	B --> X[trigger-react-publish]
+    X --> C(build-and-publish-react)
+    B --> D(release-wc)
+    C --> E(release-react)
+    B --> F(trigger-angular-publish)
+    F --> G(build-and-publish-angular)
+    G --> H(release-angular)
+```
+
+The `Publish & Release` workflow will handle the following steps:
+
+- Update the version in `package.json`.
+- Build the `@trimble-oss/moduswebcomponents` package.
+- Publish the `@trimble-oss/moduswebcomponents` package to the npm registry.
+- Trigger the `Publish & Release - Angular` workflow to publish the React package.
+  - Update the version in `integrations/angular/ng<version#>/package.json`.
+  - Build the `@trimble-oss/moduswebcomponents-angular` package.
+  - Publish the `@trimble-oss/moduswebcomponents-angular` package to the npm registry.
+- Trigger the `Publish & Release - React` workflow to publish the React package.
+  - Update the version in `integrations/react/package.json`.
+  - Build the `@trimble-oss/moduswebcomponents-react` package.
+  - Publish the `@trimble-oss/moduswebcomponents-react` package to the npm registry.
+- Create GitHub releases for all three packages.
+
+## Notes
+
+For reference, we publish from inside of the `dist` folder in order to publish [flatly](https://davidwells.io/blog/publishing-flat-npm-packages-for-easier-import-paths-smaller-consumer-bundle-sizes).
+
+This means if you're using tools like `npm pack` or `npm publish`, you'll need to that from inside `dist` as well.
+
+This lets us make imports like `import "@trimble-oss/moduswebcomponents/dist/modus-wc-styles.css";` not contain the `dist/` in the import path.
+
+We set the customElementsDir on the output targets to `components` to achieve this.

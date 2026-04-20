@@ -1,0 +1,32 @@
+# Angular
+.angular/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+www/
+storybook-static/
+.wireit/
+src/styles/output.css
+src/providers/theme/css-content.ts
+# built npm packages
+*.tgz
+
+# Stencil
+.stencil/
+/integrations/**/stencil-generated/
+
+# Test coverage
+coverage/
+
+# IDE and editor files
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Logs
+*.log
+

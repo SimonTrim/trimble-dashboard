@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    // Basic Options
+    "target": "es2017",
+    "module": "ESNext",
+    "lib": ["dom", "es2017"],
+    "jsx": "react",
+    "jsxFactory": "h",
+    "sourceMap": true,
+
+    // Type-Checking Options
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+
+    // Module Resolution Options
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    // Other Options
+    "declaration": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "experimentalDecorators": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["jest", "marked"]
+  },
+  "include": ["src", "./*.ts"],
+  "exclude": ["node_modules"]
+}

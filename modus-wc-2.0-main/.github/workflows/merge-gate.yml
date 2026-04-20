@@ -1,0 +1,74 @@
+name: Merge Gate
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  merge-gate:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: ${{ vars.NODE_VERSION }}
+          cache: 'npm'
+
+      # - uses: google/wireit@setup-github-actions-caching/v2
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          TRIMBLE_AGENTIC_NPM_TOKEN: ${{ secrets.TRIMBLE_AGENTIC_NPM_TOKEN }}
+
+      - name: Run ESLint
+        id: lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build Storybook & Stencil
+        id: build
+        run: npm run build:ci
+        continue-on-error: true
+
+      - name: Run unit tests and check code coverage
+        id: tests
+        run: npm run test:coverage
+        continue-on-error: true
+
+      - name: Check for step failures
+        if: always()
+        run: |
+          if [ "${{ steps.lint.outcome }}" == "failure" ] || \
+             [ "${{ steps.build.outcome }}" == "failure" ] || \
+             [ "${{ steps.tests.outcome }}" == "failure" ]; then
+            echo "One or more steps have failed. Please review the logs and fix the issues before merging."
+            exit 1
+          fi
+
+  build-angular-integration:
+    uses: ./.github/workflows/build-angular.yml
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      TRIMBLE_AGENTIC_NPM_TOKEN: ${{ secrets.TRIMBLE_AGENTIC_NPM_TOKEN }}
+
+  build-react-integration:
+    uses: ./.github/workflows/build-react.yml
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      TRIMBLE_AGENTIC_NPM_TOKEN: ${{ secrets.TRIMBLE_AGENTIC_NPM_TOKEN }}
+
+  build-vue-integration:
+    uses: ./.github/workflows/build-vue.yml
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      TRIMBLE_AGENTIC_NPM_TOKEN: ${{ secrets.TRIMBLE_AGENTIC_NPM_TOKEN }}

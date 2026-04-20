@@ -1,0 +1,155 @@
+# This publishes various packages in this repository.
+# It will update the package.json version, build the Angular package, publish it to the Artifactory NPM registry, as well as create a GitHub release.
+# This is triggered by running the main 'Publish & Release' workflow.
+
+name: Publish & Release - Angular
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+  packages: write
+
+jobs:
+  build-and-publish-angular:
+    runs-on: ubuntu-latest
+    strategy:
+      # prevents race conditions
+      max-parallel: 1
+      matrix:
+        angular-version: [17, 18, 19]
+
+    defaults:
+      run:
+        working-directory: integrations/angular/ng${{ matrix.angular-version }}
+
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: ${{ vars.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            integrations/angular/ng${{ matrix.angular-version }}/package-lock.json
+            integrations/angular/ng${{ matrix.angular-version }}/projects/trimble-oss/moduswebcomponents-angular/package-lock.json
+
+      # - uses: google/wireit@setup-github-actions-caching/v2
+
+      - name: Install Web Component dependencies
+        run: npm ci
+        working-directory: .
+        env:
+          TRIMBLE_AGENTIC_NPM_TOKEN: ${{ secrets.TRIMBLE_AGENTIC_NPM_TOKEN }}
+
+      - name: Build Base Web Components
+        run: npm run build:ci
+        working-directory: .
+
+      - name: Pack Base Web Components
+        working-directory: ./dist
+        run: |
+          TARBALL=$(npm pack)
+          echo "TARBALL=${TARBALL}" >> $GITHUB_ENV
+
+      - name: Update to use new WebComponent version
+        run: |
+          jq --arg version "${{ github.event.inputs.version }}" \
+          '.dependencies["@trimble-oss/moduswebcomponents"] = $version' package.json > package.json.tmp && \
+          mv package.json.tmp package.json && \
+          cd projects/trimble-oss/moduswebcomponents-angular && \
+          jq --arg version "${{ github.event.inputs.version }}" \
+          '.peerDependencies["@trimble-oss/moduswebcomponents"] = $version' package.json > package.json.tmp && \
+          mv package.json.tmp package.json
+
+      - run: npm i
+
+      - name: Install local WebComponent dependency (for build)
+        run: npm install file:../../../dist/${TARBALL} --no-save
+
+      - name: Update package.json version
+        run: |
+          cd projects/trimble-oss/moduswebcomponents-angular && \
+          jq --arg version "${{ github.event.inputs.version }}-ng${{ matrix.angular-version }}" \
+          '.version = $version' package.json > package.json.tmp && \
+          mv package.json.tmp package.json
+
+      - name: Build distribution
+        run: npm run build
+
+      - name: Package distribution
+        run: npm pack ./dist/trimble-oss/moduswebcomponents-angular
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: angular-${{ matrix.angular-version }}-distribution-v${{ github.event.inputs.version }}-ng${{ matrix.angular-version }}
+          path: '**/*.tgz'
+
+      - name: Set npm Registry Auth Token
+        run: npm set //registry.npmjs.org/:_authToken ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish distribution
+        run: npm publish *.tgz
+
+      - name: Set GitHub Registry Auth Token
+        run: npm set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish npm Package to GitHub Registry
+        run: npm publish *.tgz --registry=https://npm.pkg.github.com --access public --ignore-scripts
+
+  release-angular:
+    needs: build-and-publish-angular
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        angular-version: [17, 18, 19]
+
+    defaults:
+      run:
+        working-directory: integrations/angular/ng${{ matrix.angular-version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Download artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: angular-${{ matrix.angular-version }}-distribution-v${{ github.event.inputs.version }}-ng${{ matrix.angular-version }}
+          path: .
+
+      - name: Find the release asset
+        id: find-asset
+        run: |
+          asset_path=$(find . -name 'trimble-oss-moduswebcomponents-angular*.tgz')
+          full_asset_path="${{ github.workspace }}/integrations/angular/ng${{ matrix.angular-version }}/${asset_path}"
+          echo "asset_path=$full_asset_path" >> $GITHUB_OUTPUT
+
+      - name: Rename release asset
+        run: |
+          mv ${{ steps.find-asset.outputs.asset_path }} package-ng${{ matrix.angular-version }}.tgz
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: moduswebcomponents-angular-${{ github.event.inputs.version }}-ng${{ matrix.angular-version }}
+          name: Modus Web Components Angular ${{ github.event.inputs.version }}-ng${{ matrix.angular-version }}
+          files: |
+            **/package-ng${{ matrix.angular-version }}.tgz

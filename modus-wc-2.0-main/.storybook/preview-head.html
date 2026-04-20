@@ -1,0 +1,63 @@
+<script>
+  // Determine if we're running locally or deployed
+  const isLocal = window.location.hostname.includes('localhost');
+  const cssPath = isLocal ? '../src/styles/output.css' : 'public/output.css';
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = cssPath;
+  document.head.appendChild(link);
+</script>
+<style>
+  html,
+  body,
+  body > *,
+  a,
+  b,
+  button,
+  div,
+  em,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  input,
+  label,
+  li,
+  mark,
+  p,
+  select,
+  small,
+  strong,
+  table,
+  tbody,
+  thead,
+  td,
+  td span,
+  textarea,
+  th,
+  tr,
+  .sb-wrapper {
+    font-family:
+      'Open Sans',
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      roboto,
+      'Helvetica Neue',
+      'Noto Sans',
+      'Liberation Sans',
+      arial !important;
+  }
+  code,
+  code span,
+  pre,
+  pre span,
+  .prismjs {
+    font-family:
+      ui-monospace, Menlo, Monaco, 'Roboto Mono', 'Oxygen Mono',
+      'Ubuntu Monospace', 'Source Code Pro', 'Droid Sans Mono', 'Courier New',
+      monospace !important;
+  }
+</style>

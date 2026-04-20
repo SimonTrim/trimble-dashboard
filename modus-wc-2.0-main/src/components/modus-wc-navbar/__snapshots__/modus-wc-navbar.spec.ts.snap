@@ -1,0 +1,129 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`modus-wc-navbar should render with custom props and slots 1`] = `
+<modus-wc-navbar class="test-class" custom-class="test-class">
+  <!---->
+  <modus-wc-toolbar>
+    <!---->
+    <div class="modus-wc-navbar">
+      <div class="modus-wc-navbar-start">
+        <div slot="start">
+          <modus-wc-button>
+            <!---->
+            <button aria-label="Trimble logo" class="logo modus-wc-btn modus-wc-btn-borderless modus-wc-btn-primary modus-wc-btn-sm" tabindex="0" type="button">
+              <modus-wc-logo name="trimble"></modus-wc-logo>
+            </button>
+          </modus-wc-button>
+          <div slot="start">
+            Start
+          </div>
+        </div>
+      </div>
+      <div class="modus-wc-navbar-center">
+        <div slot="center">
+          <div slot="center">
+            Center
+          </div>
+        </div>
+      </div>
+      <div class="modus-wc-navbar-end">
+        <div slot="end">
+          <div slot="end">
+            End
+          </div>
+          <modus-wc-button>
+            <!---->
+            <button aria-label="User profile" class="modus-wc-btn modus-wc-btn-borderless modus-wc-btn-circle modus-wc-btn-primary modus-wc-btn-sm user-button" tabindex="0" type="button">
+              <modus-wc-avatar alt="" size="xs"></modus-wc-avatar>
+            </button>
+          </modus-wc-button>
+          <div class="hidden user">
+            <modus-wc-card>
+              <div slot="header">
+                <modus-wc-avatar alt=""></modus-wc-avatar>
+              </div>
+              <div slot="title"></div>
+              <div></div>
+              <div slot="actions">
+                <modus-wc-button>
+                  <!---->
+                  <button class="modus-wc-btn modus-wc-btn-filled modus-wc-btn-md modus-wc-btn-primary my-trimble" tabindex="0" type="button">
+                    Access MyTrimble
+                  </button>
+                </modus-wc-button>
+              </div>
+              <div slot="footer">
+                <modus-wc-button>
+                  <!---->
+                  <button class="modus-wc-btn modus-wc-btn-borderless modus-wc-btn-md modus-wc-btn-primary sign-out" tabindex="0" type="button">
+                    Sign out
+                  </button>
+                </modus-wc-button>
+              </div>
+            </modus-wc-card>
+          </div>
+        </div>
+      </div>
+    </div>
+  </modus-wc-toolbar>
+</modus-wc-navbar>
+`;
+
+exports[`modus-wc-navbar should render with no props 1`] = `
+<modus-wc-navbar>
+  <!---->
+  <modus-wc-toolbar>
+    <!---->
+    <div class="modus-wc-navbar">
+      <div class="modus-wc-navbar-start">
+        <div slot="start">
+          <modus-wc-button>
+            <!---->
+            <button aria-label="Trimble logo" class="logo modus-wc-btn modus-wc-btn-borderless modus-wc-btn-primary modus-wc-btn-sm" tabindex="0" type="button">
+              <modus-wc-logo name="trimble"></modus-wc-logo>
+            </button>
+          </modus-wc-button>
+        </div>
+      </div>
+      <div class="modus-wc-navbar-center">
+        <div slot="center"></div>
+      </div>
+      <div class="modus-wc-navbar-end">
+        <div slot="end">
+          <modus-wc-button>
+            <!---->
+            <button aria-label="User profile" class="modus-wc-btn modus-wc-btn-borderless modus-wc-btn-circle modus-wc-btn-primary modus-wc-btn-sm user-button" tabindex="0" type="button">
+              <modus-wc-avatar alt="" size="xs"></modus-wc-avatar>
+            </button>
+          </modus-wc-button>
+          <div class="hidden user">
+            <modus-wc-card>
+              <div slot="header">
+                <modus-wc-avatar alt=""></modus-wc-avatar>
+              </div>
+              <div slot="title"></div>
+              <div></div>
+              <div slot="actions">
+                <modus-wc-button>
+                  <!---->
+                  <button class="modus-wc-btn modus-wc-btn-filled modus-wc-btn-md modus-wc-btn-primary my-trimble" tabindex="0" type="button">
+                    Access MyTrimble
+                  </button>
+                </modus-wc-button>
+              </div>
+              <div slot="footer">
+                <modus-wc-button>
+                  <!---->
+                  <button class="modus-wc-btn modus-wc-btn-borderless modus-wc-btn-md modus-wc-btn-primary sign-out" tabindex="0" type="button">
+                    Sign out
+                  </button>
+                </modus-wc-button>
+              </div>
+            </modus-wc-card>
+          </div>
+        </div>
+      </div>
+    </div>
+  </modus-wc-toolbar>
+</modus-wc-navbar>
+`;

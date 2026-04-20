@@ -1,0 +1,15 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`modus-wc-tooltip should render with custom props 1`] = `
+<modus-wc-tooltip content="Test" custom-class="test-class" force-open="true" position="bottom" tooltip-id="test-id">
+  <!---->
+  <div aria-describedby="test-id" id="test-id"></div>
+</modus-wc-tooltip>
+`;
+
+exports[`modus-wc-tooltip should render with default props 1`] = `
+<modus-wc-tooltip>
+  <!---->
+  <div></div>
+</modus-wc-tooltip>
+`;
