@@ -29,7 +29,7 @@ En utilisant la **Regions API** de Trimble Connect (`https://app.connect.trimble
 
 ### 2. Déploiement
 ✅ **Backend déployé sur Vercel** à 10:52 UTC le 11 février 2026
-✅ **Vérification** : https://trimble-dashboard-v2.vercel.app/ retourne bien la version 2.2.0
+✅ **Vérification** : https://trimble-dashboard.vercel.app/ retourne bien la version 2.2.0
 
 ## 🧪 Prochaines Étapes pour Tester
 
@@ -74,9 +74,9 @@ Dans la console Chrome, vous devriez maintenant voir :
 ```
 ✅ WorkspaceAPIAdapter initialized for project: Cw3RYI17np8
 🌍 Region: europe
-🔗 Backend URL: https://trimble-dashboard-v2.vercel.app
+🔗 Backend URL: https://trimble-dashboard.vercel.app
 🔑 Access token provided
-🌐 API Request via backend: GET https://trimble-dashboard-v2.vercel.app/api/projects/Cw3RYI17np8/files
+🌐 API Request via backend: GET https://trimble-dashboard.vercel.app/api/projects/Cw3RYI17np8/files
 ✅ Retrieved X files from REST API
 ```
 
@@ -108,7 +108,7 @@ Si vous voyez toujours des erreurs 404 après avoir vidé le cache :
 
 2. **Vérifiez que le header X-Project-Region est envoyé** :
    - Ouvrez l'onglet "Network" dans Chrome DevTools
-   - Filtrez par "trimble-dashboard-v2.vercel.app"
+   - Filtrez par "trimble-dashboard.vercel.app"
    - Cliquez sur une requête API
    - Vérifiez que le header `X-Project-Region` est présent dans "Request Headers"
 
@@ -120,7 +120,7 @@ Si vous voyez toujours des erreurs 404 après avoir vidé le cache :
 
 - **Trimble Connect Regions API**: https://app.connect.trimble.com/tc/api/2.0/regions
 - **Trimble Developer Portal**: https://developer.trimble.com/docs/connect
-- **Backend Status**: https://trimble-dashboard-v2.vercel.app/
+- **Backend Status**: https://trimble-dashboard.vercel.app/
 
 ---
 

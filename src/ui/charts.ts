@@ -171,10 +171,10 @@ Chart.register(barRevealPlugin);
  * fade-in CSS runs concurrently). The user then sees no rotation at all.
  *
  * This plugin takes full control: Chart.js draws the final doughnut on every
- * frame, and we wrap `beforeDatasetsDraw` with a pie-slice clip that expands
- * from the 12 o'clock position clockwise. The reveal is guaranteed visible,
- * smooth over the full duration, and independent of Chart.js's internal
- * animation pipeline.
+ * frame, and we reveal it through a rotating wedge clip. Importantly, the
+ * chart itself does not get canvas-rotated anymore: only the clip path moves.
+ * That preserves the final placement/order of every slice and avoids the
+ * "désordonné" effect where pieces seem to drift before snapping into place.
  */
 const donutRevealPlugin = {
   id: 'donutReveal',
@@ -228,21 +228,17 @@ const donutRevealPlugin = {
     if (state.progress <= 0) {
       ctx.rect(cx, cy, 0, 0);
     } else {
+      const leadOffset = (1 - state.progress) * Math.PI * 0.72;
+      const startAngle = -Math.PI / 2 - leadOffset;
+      const endAngle = startAngle + state.progress * 2 * Math.PI;
       ctx.moveTo(cx, cy);
-      // Fixed wedge reveal from 12 o'clock, with the dataset itself rotating
-      // slightly into place to make the motion unmistakably visible.
-      ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + state.progress * 2 * Math.PI);
+      // The wedge itself sweeps into place, which reads as a smooth rotation
+      // while keeping the actual slice geometry stable on screen.
+      ctx.arc(cx, cy, r, startAngle, endAngle);
       ctx.closePath();
     }
     ctx.clip();
-
-    const rotationOffset = (1 - state.progress) * Math.PI * 1.15;
-    const scale = 0.92 + (state.progress * 0.08);
-    ctx.translate(cx, cy);
-    ctx.rotate(rotationOffset);
-    ctx.scale(scale, scale);
-    ctx.translate(-cx, -cy);
-    ctx.globalAlpha = 0.35 + (state.progress * 0.65);
+    ctx.globalAlpha = 0.45 + (state.progress * 0.55);
     state.clippedThisDraw = true;
 
     requestAnimationFrame(() => {

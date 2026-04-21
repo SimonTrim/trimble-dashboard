@@ -37,6 +37,7 @@ let dashboard: Dashboard | null = null;
 let isStandaloneMode = false;
 let isInitialized = false;
 let menuCreated = false;
+let suppressInitialShowDashboardUntil = 0;
 
 /**
  * Détecter si nous sommes en mode standalone (lien direct) ou intégré (iframe Trimble Connect)
@@ -262,8 +263,15 @@ async function showDashboard(): Promise<void> {
   }
 
   try {
+    const dashboardAlreadyVisible = !!document.querySelector('#app .dashboard');
+    if (dashboardAlreadyVisible && Date.now() < suppressInitialShowDashboardUntil) {
+      logger.info('Skipping redundant show_dashboard command right after initial render');
+      return;
+    }
+
     logger.info('Showing/refreshing dashboard...');
     await dashboard.render();
+    suppressInitialShowDashboardUntil = 0;
     logger.info('✓ Dashboard displayed/refreshed');
   } catch (error) {
     logger.error('Failed to show dashboard', { error });
@@ -477,6 +485,10 @@ async function initializeWithToken(accessToken: string, projectInfo: any): Promi
   }
 
   await dashboard.render();
+  // Trimble Connect can emit `extension.command/show_dashboard` immediately
+  // after the initial mount. Skipping that one avoids a second full dashboard
+  // render and the duplicate chart entrance animations a couple seconds later.
+  suppressInitialShowDashboardUntil = Date.now() + 10000;
   
   isInitialized = true;
   logger.info('✅ Extension ready with Trimble Connect authentication!');
