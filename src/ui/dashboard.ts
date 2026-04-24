@@ -1884,6 +1884,7 @@ export class Dashboard {
 
   private bcfStatusTileHtml(): string {
     const settings = this.getTileSettings('bcf-status-donut');
+    const chartContainerClass = settings.chartType === 'radar' ? 'chart-container chart-radar' : 'chart-container';
     const panel = this.tileSettingsPanelHtml(
       'bcf-status-donut',
       'Réglages — BCF par statut',
@@ -1899,13 +1900,13 @@ export class Dashboard {
       ].join(''),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>BCF par statut</h3>
         ${panel}
       </div>
       <div class="card-content">
-        <div class="chart-container">
+        <div class="${chartContainerClass}">
           <canvas id="bcf-status-donut-canvas"></canvas>
           <div id="bcf-status-treemap" class="treemap-container" style="display:none"></div>
         </div>
@@ -1926,7 +1927,7 @@ export class Dashboard {
       ], settings.chartType || 'treemap'),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>Fichiers par type</h3>
         ${panel}
@@ -1961,7 +1962,7 @@ export class Dashboard {
       this.getBCFCreatedResolvedSummaryLabel(period),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>BCF créés vs résolus dans le temps</h3>
         ${panel}
@@ -1992,7 +1993,7 @@ export class Dashboard {
       ].join(''),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>Fichiers déposés — évolution cumulative</h3>
         ${panel}
@@ -2034,7 +2035,7 @@ export class Dashboard {
       ].join(''),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>${this.depositFrequencyTitle()}</h3>
         ${panel}
@@ -2058,7 +2059,7 @@ export class Dashboard {
       ], top || 'all'),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>${label}</h3>
         ${panel}
@@ -2080,7 +2081,7 @@ export class Dashboard {
       ], top),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>Top ${top} — Fichiers les plus mis à jour (nouvelles versions)</h3>
         ${panel}
@@ -2105,7 +2106,7 @@ export class Dashboard {
       ], top),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>Top ${top} — BCF non résolus les plus anciens</h3>
         ${panel}
@@ -2136,7 +2137,7 @@ export class Dashboard {
       ].join(''),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>${this.formatResultsTitle('Fichiers récents', count)}</h3>
         ${panel}
@@ -2160,7 +2161,7 @@ export class Dashboard {
       ], settings.window || '30d'),
     );
 
-    return `<div class="card">
+    return `<div class="card has-floating-panel">
       <div class="card-header">
         <h3>${this.formatResultsTitle('BCF récents', count)}</h3>
         ${panel}
@@ -2220,7 +2221,7 @@ export class Dashboard {
       const catTiles = TILE_DEFS.filter(t => t.cat === cat);
       return `<div class="settings-section-title">${cat}</div>
         <div class="settings-grid">${catTiles.map(t =>
-        `<label class="settings-item"><input type="checkbox" data-tile="${t.id}" ${this.tileConfig.hidden.includes(t.id) ? '' : 'checked'}/><i class="modus-icon" style="font-size:0.875rem">${t.icon}</i> ${t.label}</label>`
+        `<label class="settings-item"><input type="checkbox" data-tile="${t.id}" ${this.tileConfig.hidden.includes(t.id) ? '' : 'checked'}/><i class="modus-icon mi-${t.icon}" aria-hidden="true"></i><span class="settings-item-label">${t.label}</span></label>`
       ).join('')}</div>`;
     }).join('');
 

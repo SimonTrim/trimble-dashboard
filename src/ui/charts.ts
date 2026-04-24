@@ -868,7 +868,18 @@ export class ChartsManager {
         customColors?.resolved || COLORS.warning,
         customColors?.inProgress || COLORS.accent,
       ];
-      const pctCallback = (ctx: any) => { const v = ctx.parsed || ctx.parsed.y; const pct = total > 0 ? Math.round(((typeof v === 'number' ? v : ctx.parsed) / total) * 100) : 0; return ` ${ctx.label}: ${typeof v === 'number' ? v : ctx.parsed} (${pct}%)`; };
+      const getTooltipValue = (ctx: any): number => {
+        if (typeof ctx.parsed === 'number') return ctx.parsed;
+        if (typeof ctx.parsed?.y === 'number') return ctx.parsed.y;
+        if (typeof ctx.parsed?.r === 'number') return ctx.parsed.r;
+        if (typeof ctx.raw === 'number') return ctx.raw;
+        return 0;
+      };
+      const pctCallback = (ctx: any) => {
+        const value = getTooltipValue(ctx);
+        const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+        return ` ${ctx.label}: ${value} (${pct}%)`;
+      };
 
       if (chartType === 'column' || chartType === 'bar') {
         const horizontal = chartType === 'bar';
@@ -892,6 +903,7 @@ export class ChartsManager {
         });
       } else if (chartType === 'radar') {
         const baseRadar = this.animationsEnabled ? getBaseOpts() : withAnimation(getBaseOpts(), false);
+        const radarMax = Math.max(5, ...values);
         this.mountChart('bcfStatusDonut', ctx, {
           type: 'radar',
           data: {
@@ -899,24 +911,34 @@ export class ChartsManager {
             datasets: [{
               label: 'Topics',
               data: values,
-              borderColor: colors[0],
-              backgroundColor: isDark() ? 'rgba(76, 175, 80, 0.18)' : 'rgba(76, 175, 80, 0.12)',
+              borderColor: isDark() ? '#60a5fa' : '#2563eb',
+              backgroundColor: isDark() ? 'rgba(96, 165, 250, 0.18)' : 'rgba(37, 99, 235, 0.14)',
               pointBackgroundColor: colors,
               pointBorderColor: colors,
-              pointRadius: 3,
-              borderWidth: 2,
+              pointHoverBackgroundColor: colors,
+              pointHoverBorderColor: colors,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBorderWidth: 1.5,
+              borderWidth: 2.5,
+              fill: true,
             }],
           },
           options: {
             ...baseRadar,
+            layout: { padding: { top: 4, right: 10, bottom: 6, left: 10 } },
+            elements: {
+              line: { tension: 0.15 },
+            },
             plugins: { ...(baseRadar.plugins || {}), legend: { display: false }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } },
             scales: {
               r: {
                 beginAtZero: true,
+                suggestedMax: radarMax,
                 angleLines: { color: tc.grid },
                 grid: { color: tc.grid },
-                pointLabels: { color: tc.muted, font: { size: 11 } },
-                ticks: { color: tc.muted, backdropColor: 'transparent' },
+                pointLabels: { color: tc.muted, font: { size: 11, weight: '600' as const }, padding: 4 },
+                ticks: { display: false, backdropColor: 'transparent', showLabelBackdrop: false },
               },
             },
           },
