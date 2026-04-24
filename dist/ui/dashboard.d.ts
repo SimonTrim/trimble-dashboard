@@ -8,8 +8,11 @@ export declare class Dashboard {
     private chartsManager;
     private containerId;
     private tileConfig;
+    private tileSettings;
     private dragRAF;
     private projectName;
+    private openTileSettingsPanel;
+    private globalTileSettingsEventsAttached;
     private allTopics;
     private allFiles;
     private allNotes;
@@ -25,6 +28,11 @@ export declare class Dashboard {
     private loadTileConfig;
     private saveTileConfig;
     private resetTileConfig;
+    private loadTileSettings;
+    private saveTileSettings;
+    private getTileSettings;
+    private updateTileSetting;
+    private updateTileColorSetting;
     render(): Promise<void>;
     private static readonly CACHE_TTL_MS;
     private getCacheKey;
@@ -41,6 +49,12 @@ export declare class Dashboard {
     private refreshDataInBackground;
     private attachHeaderEvents;
     private applyTileVisibility;
+    private bindDragHandleForTile;
+    private attachTileSettingsEvents;
+    private closeOpenTileSettingsPanel;
+    private toggleTileSettingsPanel;
+    private refreshConfiguredTile;
+    private renderTargetTileById;
     private initDragDrop;
     private saveTileOrder;
     private renderMetrics;
@@ -62,28 +76,31 @@ export declare class Dashboard {
      */
     private getCircularChartDelay;
     /**
-     * File-dependent charts: Cumulative, Deposit Frequency, File Type pie.
-     * Called once, as soon as `filesPromise` resolves, so each chart animates
-     * exactly one time.
-     */
-    private renderFileCharts;
-    /**
-     * Topic-dependent charts: BCF Status donut, BCF Priority donut, BCF
-     * Created vs Resolved. Called once, as soon as `topicsPromise` resolves.
+     * Topic-dependent charts. Settings-driven tiles are refreshed separately so
+     * this method only renders the remaining non-settings chart(s).
      */
     private renderTopicCharts;
-    /**
-     * Renders every chart. Only used by the cache-restore path and by
-     * background refresh (where `chartsManager.setAnimationsEnabled(false)` is
-     * flipped first so charts update silently).
-     */
-    private renderCharts;
+    private startOfIsoWeek;
+    private startOfPeriod;
+    private addPeriods;
+    private getIsoWeekNumber;
+    private formatPeriodLabel;
+    private periodUnitLabel;
+    private getWindowStart;
+    private getFileTypeCounts;
+    private getFileTypeFilterOptions;
+    private getFileTypeColor;
+    private getBCFStatusDataset;
+    private renderTreemap;
+    private getCumulativeDataForPeriod;
+    private getDepositFrequencyData;
+    private getPeriodDistance;
+    private getBCFCreatedResolvedData;
+    private renderBCFStatusTile;
+    private renderFileTypeTile;
     private renderCumulativeChart;
     private renderDepositFrequencyChart;
-    private startOfIsoWeek;
-    private getAvailableBcfWeeks;
     private renderBCFCreatedResolvedChart;
-    private attachBcfCreatedResolvedPeriod;
     private renderBCFAssigneeChart;
     private renderTopContributors;
     private renderTopUpdatedFiles;
@@ -114,7 +131,24 @@ export declare class Dashboard {
     private rerenderChart;
     private getCumulativeData;
     private getDepositFreqData;
-    private bcfCreatedResolvedPeriodSwitcher;
+    private formatResultsTitle;
+    private getRecentFilesFiltered;
+    private getRecentBcfFiltered;
+    private tileSettingsPanelHtml;
+    private settingsChoiceGroupHtml;
+    private bcfStatusColorSettingsHtml;
+    private getSettingsEnabledTileMarkup;
+    private bcfStatusTileHtml;
+    private fileTypeTileHtml;
+    private bcfCreatedResolvedTileHtml;
+    private cumulativeTileHtml;
+    private depositFrequencyTitle;
+    private depositFrequencyTileHtml;
+    private topContributorsTileHtml;
+    private topUpdatedFilesTileHtml;
+    private oldestUnresolvedTileHtml;
+    private recentFilesTileHtml;
+    private recentBcfTileHtml;
     private getTemplate;
     private metricHtml;
 }

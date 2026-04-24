@@ -58,6 +58,59 @@ const DEFAULT_ORDER = TILE_DEFS.map(t => t.id);
 interface TileConfig { order: string[]; hidden: string[]; }
 const STORAGE_KEY = 'trimble-dashboard-tiles-v3';
 const THEME_KEY = 'trimble-dashboard-theme';
+const TILE_SETTINGS_KEY = 'trimble-dashboard-tile-settings-v1';
+
+type PeriodMode = 'day' | 'week' | 'month';
+type RangeMode = 12 | 26 | 52 | 'all';
+type TopMode = 3 | 5 | 10 | 20 | 'all';
+
+interface TileSettingsMap {
+  [tileId: string]: any;
+}
+
+const DEFAULT_TILE_SETTINGS: TileSettingsMap = {
+  'bcf-status-donut': {
+    chartType: 'treemap',
+    colors: {
+      open: '#3b82f6',
+      inProgress: '#a3a3a3',
+      resolved: '#f59e0b',
+      closed: '#4caf50',
+    },
+  },
+  'filetype-chart': {
+    chartType: 'treemap',
+  },
+  'bcf-created-resolved': {
+    chartType: 'line',
+    period: 'week',
+  },
+  'cumulative-chart': {
+    chartType: 'area',
+    period: 'month',
+  },
+  'deposit-freq-chart': {
+    chartType: 'bar',
+    period: 'week',
+    range: 26,
+  },
+  'top-contributors': {
+    top: 'all',
+  },
+  'top-updated-files': {
+    top: 20,
+  },
+  'oldest-unresolved-bcf': {
+    top: 3,
+  },
+  'recent-files-table': {
+    window: '30d',
+    extension: 'all',
+  },
+  'recent-bcf-table': {
+    window: '30d',
+  },
+};
 
 // =============================================
 // DASHBOARD CLASS
@@ -67,8 +120,11 @@ export class Dashboard {
   private chartsManager: ChartsManager;
   private containerId: string;
   private tileConfig: TileConfig;
+  private tileSettings: TileSettingsMap;
   private dragRAF: number | null = null;
   private projectName: string = '';
+  private openTileSettingsPanel: string | null = null;
+  private globalTileSettingsEventsAttached = false;
 
   private allTopics: BCFTopic[] = [];
   private allFiles: ProjectFile[] = [];
@@ -83,6 +139,7 @@ export class Dashboard {
     this.containerId = containerId;
     this.chartsManager = new ChartsManager();
     this.tileConfig = this.loadTileConfig();
+    this.tileSettings = this.loadTileSettings();
     this.loadTheme();
     logger.info('Dashboard initialized (v3 grid)');
   }
@@ -144,6 +201,70 @@ export class Dashboard {
     this.render();
   }
 
+  private loadTileSettings(): TileSettingsMap {
+    const mergeSetting = (tileId: string, incoming: any) => {
+      const defaults = DEFAULT_TILE_SETTINGS[tileId] || {};
+      if (tileId === 'bcf-status-donut') {
+        return {
+          ...defaults,
+          ...incoming,
+          colors: {
+            ...(defaults.colors || {}),
+            ...((incoming && incoming.colors) || {}),
+          },
+        };
+      }
+      return { ...defaults, ...incoming };
+    };
+
+    try {
+      const raw = localStorage.getItem(TILE_SETTINGS_KEY);
+      const parsed = raw ? JSON.parse(raw) as TileSettingsMap : {};
+      const merged: TileSettingsMap = {};
+
+      Object.keys(DEFAULT_TILE_SETTINGS).forEach(tileId => {
+        merged[tileId] = mergeSetting(tileId, parsed[tileId]);
+      });
+
+      return merged;
+    } catch {
+      return { ...DEFAULT_TILE_SETTINGS };
+    }
+  }
+
+  private saveTileSettings(): void {
+    try {
+      localStorage.setItem(TILE_SETTINGS_KEY, JSON.stringify(this.tileSettings));
+    } catch { /* ignore */ }
+  }
+
+  private getTileSettings(tileId: string): any {
+    if (!this.tileSettings[tileId]) {
+      this.tileSettings[tileId] = { ...(DEFAULT_TILE_SETTINGS[tileId] || {}) };
+    }
+    return this.tileSettings[tileId];
+  }
+
+  private updateTileSetting(tileId: string, key: string, value: any): void {
+    const settings = this.getTileSettings(tileId);
+    settings[key] = value;
+    if (tileId === 'recent-files-table' && (key === 'window' || key === 'extension')) {
+      this.recentFilesPage = 1;
+    }
+    if (tileId === 'recent-bcf-table' && key === 'window') {
+      this.recentBcfPage = 1;
+    }
+    this.saveTileSettings();
+    this.refreshConfiguredTile(tileId);
+  }
+
+  private updateTileColorSetting(tileId: string, colorKey: string, value: string): void {
+    const settings = this.getTileSettings(tileId);
+    settings.colors = { ...(settings.colors || {}), [colorKey]: value };
+    this.saveTileSettings();
+    this.refreshConfiguredTile(tileId);
+  }
+
   // =============================================
   // RENDER
   // =============================================
@@ -157,6 +278,7 @@ export class Dashboard {
       this.attachHeaderEvents();
       this.initDragDrop();
       this.applyTileVisibility();
+      this.attachTileSettingsEvents();
       await this.loadAllData();
       logger.info('Dashboard rendered');
     } catch (error) {
@@ -238,20 +360,24 @@ export class Dashboard {
     filesPromise.then(files => {
       this.allFiles = files;
       this.renderMetrics();
-      this.renderFileCharts();
-      this.renderTopContributors();
-      this.renderTopUpdatedFiles();
-      this.renderRecentFilesTable();
+      this.refreshConfiguredTile('cumulative-chart');
+      this.refreshConfiguredTile('deposit-freq-chart');
+      this.refreshConfiguredTile('filetype-chart');
+      this.refreshConfiguredTile('top-contributors');
+      this.refreshConfiguredTile('top-updated-files');
+      this.refreshConfiguredTile('recent-files-table');
       onFirst();
     });
 
     topicsPromise.then(topics => {
       this.allTopics = topics;
       this.renderMetrics();
-      this.renderTopicCharts();
+      this.refreshConfiguredTile('bcf-status-donut');
+      this.refreshConfiguredTile('bcf-created-resolved');
       this.renderBCFAssigneeChart();
-      this.renderOldestUnresolvedBCF();
-      this.renderRecentBCFTable();
+      this.refreshConfiguredTile('oldest-unresolved-bcf');
+      this.refreshConfiguredTile('recent-bcf-table');
+      this.renderTopicCharts();
       onFirst();
     });
 
@@ -271,7 +397,6 @@ export class Dashboard {
 
     await Promise.all([filesPromise, topicsPromise, notesPromise, viewsPromise]);
     this.attachChartTypeSwitchers();
-    this.attachBcfCreatedResolvedPeriod();
     this.hideLoader();
     this.saveToCache();
     logger.info('All data loaded and dashboard rendered');
@@ -279,18 +404,22 @@ export class Dashboard {
 
   private renderAllSections(): void {
     this.renderMetrics();
-    this.renderCharts();
+    this.refreshConfiguredTile('cumulative-chart');
+    this.refreshConfiguredTile('deposit-freq-chart');
+    this.refreshConfiguredTile('bcf-status-donut');
+    this.refreshConfiguredTile('bcf-created-resolved');
+    this.refreshConfiguredTile('filetype-chart');
     this.renderBCFAssigneeChart();
-    this.renderTopContributors();
-    this.renderTopUpdatedFiles();
-    this.renderOldestUnresolvedBCF();
-    this.renderRecentFilesTable();
-    this.renderRecentBCFTable();
+    this.refreshConfiguredTile('top-contributors');
+    this.refreshConfiguredTile('top-updated-files');
+    this.refreshConfiguredTile('oldest-unresolved-bcf');
+    this.refreshConfiguredTile('recent-files-table');
+    this.refreshConfiguredTile('recent-bcf-table');
+    this.renderTopicCharts();
     this.renderViewsSection();
     this.renderTeamSection();
     this.renderTimeline();
     this.attachChartTypeSwitchers();
-    this.attachBcfCreatedResolvedPeriod();
   }
 
   /**
@@ -409,6 +538,144 @@ export class Dashboard {
         (tile as HTMLElement).classList.remove('hidden-tile');
       }
     });
+  }
+
+  private bindDragHandleForTile(tile: HTMLElement): void {
+    const handle = tile.querySelector('.tile-drag-handle') as HTMLElement | null;
+    if (!handle || handle.dataset.bound === 'true') return;
+    handle.dataset.bound = 'true';
+    handle.addEventListener('mousedown', () => tile.setAttribute('draggable', 'true'));
+  }
+
+  private attachTileSettingsEvents(scope: ParentNode = document): void {
+    scope.querySelectorAll('.tile-settings-toggle').forEach(btn => {
+      const boundBtn = btn as HTMLButtonElement;
+      if (boundBtn.dataset.bound === 'true') return;
+      boundBtn.dataset.bound = 'true';
+      boundBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tileId = boundBtn.dataset.tileId;
+        if (!tileId) return;
+        this.toggleTileSettingsPanel(tileId);
+      });
+    });
+
+    scope.querySelectorAll('.tile-settings-close').forEach(btn => {
+      const boundBtn = btn as HTMLButtonElement;
+      if (boundBtn.dataset.bound === 'true') return;
+      boundBtn.dataset.bound = 'true';
+      boundBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeOpenTileSettingsPanel();
+      });
+    });
+
+    scope.querySelectorAll('.tile-option-btn').forEach(btn => {
+      const boundBtn = btn as HTMLButtonElement;
+      if (boundBtn.dataset.bound === 'true') return;
+      boundBtn.dataset.bound = 'true';
+      boundBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tileId = boundBtn.dataset.tileId;
+        const key = boundBtn.dataset.settingKey;
+        const value = boundBtn.dataset.settingValue;
+        if (!tileId || !key || value === undefined) return;
+        this.updateTileSetting(tileId, key, value === 'all' ? 'all' : (/^\d+$/.test(value) ? Number(value) : value));
+      });
+    });
+
+    scope.querySelectorAll('.tile-color-input').forEach(input => {
+      const boundInput = input as HTMLInputElement;
+      if (boundInput.dataset.bound === 'true') return;
+      boundInput.dataset.bound = 'true';
+      boundInput.addEventListener('input', (e) => {
+        e.stopPropagation();
+        const tileId = boundInput.dataset.tileId;
+        const colorKey = boundInput.dataset.colorKey;
+        if (!tileId || !colorKey) return;
+        this.updateTileColorSetting(tileId, colorKey, boundInput.value);
+      });
+    });
+
+    if (!this.globalTileSettingsEventsAttached) {
+      document.addEventListener('click', (e) => {
+        if (!this.openTileSettingsPanel) return;
+        const target = e.target as HTMLElement;
+        if (target.closest('.tile-settings-wrapper')) return;
+        this.closeOpenTileSettingsPanel();
+      });
+      this.globalTileSettingsEventsAttached = true;
+    }
+  }
+
+  private closeOpenTileSettingsPanel(): void {
+    if (!this.openTileSettingsPanel) return;
+    const previous = this.openTileSettingsPanel;
+    this.openTileSettingsPanel = null;
+    this.refreshConfiguredTile(previous);
+  }
+
+  private toggleTileSettingsPanel(tileId: string): void {
+    const previous = this.openTileSettingsPanel;
+    this.openTileSettingsPanel = previous === tileId ? null : tileId;
+    if (previous) this.refreshConfiguredTile(previous);
+    if (this.openTileSettingsPanel) this.refreshConfiguredTile(tileId);
+  }
+
+  private refreshConfiguredTile(tileId: string): void {
+    const tile = document.querySelector(`.tile[data-tile-id="${tileId}"]`) as HTMLElement | null;
+    if (!tile) {
+      this.renderTargetTileById(tileId);
+      return;
+    }
+
+    const markup = this.getSettingsEnabledTileMarkup(tileId);
+    if (!markup) {
+      this.renderTargetTileById(tileId);
+      return;
+    }
+
+    tile.innerHTML = `<div class="tile-drag-handle" title="Déplacer"><i class="modus-icon mi-drag-indicator" style="width:10px;height:10px"></i></div>${markup}`;
+    this.bindDragHandleForTile(tile);
+    this.attachTileSettingsEvents(tile);
+    this.renderTargetTileById(tileId);
+  }
+
+  private renderTargetTileById(tileId: string): void {
+    switch (tileId) {
+      case 'bcf-status-donut':
+        this.renderBCFStatusTile();
+        break;
+      case 'filetype-chart':
+        this.renderFileTypeTile();
+        break;
+      case 'bcf-created-resolved':
+        this.renderBCFCreatedResolvedChart();
+        break;
+      case 'cumulative-chart':
+        this.renderCumulativeChart();
+        break;
+      case 'deposit-freq-chart':
+        this.renderDepositFrequencyChart();
+        break;
+      case 'top-contributors':
+        this.renderTopContributors();
+        break;
+      case 'top-updated-files':
+        this.renderTopUpdatedFiles();
+        break;
+      case 'oldest-unresolved-bcf':
+        this.renderOldestUnresolvedBCF();
+        break;
+      case 'recent-files-table':
+        this.renderRecentFilesTable();
+        break;
+      case 'recent-bcf-table':
+        this.renderRecentBCFTable();
+        break;
+      default:
+        break;
+    }
   }
 
   // =============================================
@@ -559,81 +826,24 @@ export class Dashboard {
   }
 
   /**
-   * File-dependent charts: Cumulative, Deposit Frequency, File Type pie.
-   * Called once, as soon as `filesPromise` resolves, so each chart animates
-   * exactly one time.
-   */
-  private renderFileCharts(): void {
-    this.renderCumulativeChart();
-    this.renderDepositFrequencyChart();
-
-    const ext: Record<string, number> = {};
-    this.allFiles.forEach(f => { const e = (f.extension || 'other').toLowerCase(); ext[e] = (ext[e] || 0) + 1; });
-    this.chartsManager.createFileTypeChart('filetype-canvas', ext, 'pie', this.getCircularChartDelay('filetype-chart'));
-  }
-
-  /**
-   * Topic-dependent charts: BCF Status donut, BCF Priority donut, BCF
-   * Created vs Resolved. Called once, as soon as `topicsPromise` resolves.
+   * Topic-dependent charts. Settings-driven tiles are refreshed separately so
+   * this method only renders the remaining non-settings chart(s).
    */
   private renderTopicCharts(): void {
-    const s: BCFStatusData = { open: 0, inProgress: 0, resolved: 0, closed: 0 };
     const p: BCFPriorityData = { high: 0, medium: 0, low: 0 };
     this.allTopics.forEach(t => {
-      if (t.status === 'Open') s.open++; else if (t.status === 'In Progress') s.inProgress++;
-      else if (t.status === 'Resolved') s.resolved++; else s.closed++;
       const pr = (t.priority || 'Medium').toLowerCase();
       if (pr === 'high') p.high++; else if (pr === 'low') p.low++; else p.medium++;
     });
 
-    this.chartsManager.createBCFStatusDonutChart('bcf-status-donut-canvas', s, 'doughnut', this.getCircularChartDelay('bcf-status-donut'));
-    this.chartsManager.createBCFPriorityChart('bcf-priority-canvas', p, 'doughnut', this.getCircularChartDelay('bcf-priority-chart'));
-    this.renderBCFCreatedResolvedChart('7w');
-  }
-
-  /**
-   * Renders every chart. Only used by the cache-restore path and by
-   * background refresh (where `chartsManager.setAnimationsEnabled(false)` is
-   * flipped first so charts update silently).
-   */
-  private renderCharts(): void {
-    this.renderFileCharts();
-    this.renderTopicCharts();
-  }
-
-  private renderCumulativeChart(): void {
-    const byMonth: Record<string, number> = {};
-    this.allFiles.forEach(f => {
-      const d = new Date(f.uploadedAt);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      byMonth[key] = (byMonth[key] || 0) + 1;
-    });
-    const sorted = Object.keys(byMonth).sort();
-    let cumulative = 0;
-    const data = sorted.map(key => {
-      cumulative += byMonth[key];
-      return { label: key, cumulative };
-    });
-    this.chartsManager.createCumulativeChart('cumulative-canvas', data, 'line', this.getTileStartDelay('cumulative-chart'));
-  }
-
-  private renderDepositFrequencyChart(): void {
-    const now = new Date();
-    const weeks: { label: string; count: number }[] = [];
-    for (let i = 25; i >= 0; i--) {
-      const weekStart = new Date(now);
-      weekStart.setDate(weekStart.getDate() - (i * 7) - weekStart.getDay() + 1);
-      weekStart.setHours(0, 0, 0, 0);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 7);
-      const count = this.allFiles.filter(f => {
-        const d = new Date(f.uploadedAt);
-        return d >= weekStart && d < weekEnd;
-      }).length;
-      const label = `${weekStart.getFullYear()}-w${String(Math.ceil((weekStart.getDate()) / 7)).padStart(2, '0')}`;
-      weeks.push({ label, count });
-    }
-    this.chartsManager.createDepositFrequencyChart('deposit-freq-canvas', weeks, 'bar', this.getTileStartDelay('deposit-freq-chart'));
+    this.chartsManager.createBCFPriorityChart(
+      'bcf-priority-canvas',
+      p,
+      this.chartTypeState['bcf-priority'] || 'doughnut',
+      (this.chartTypeState['bcf-priority'] || 'doughnut') === 'bar'
+        ? this.getTileStartDelay('bcf-priority-chart')
+        : this.getCircularChartDelay('bcf-priority-chart'),
+    );
   }
 
   private startOfIsoWeek(date: Date): Date {
@@ -645,65 +855,370 @@ export class Dashboard {
     return normalized;
   }
 
-  private getAvailableBcfWeeks(): number {
-    const timestamps = this.allTopics.flatMap(topic => {
-      const values: number[] = [];
-      const created = new Date(topic.createdAt).getTime();
-      if (!Number.isNaN(created)) values.push(created);
-      const modified = new Date(topic.modifiedAt).getTime();
-      if (!Number.isNaN(modified)) values.push(modified);
-      return values;
-    });
-
-    if (!timestamps.length) return 1;
-
-    const earliestWeek = this.startOfIsoWeek(new Date(Math.min(...timestamps)));
-    const currentWeek = this.startOfIsoWeek(new Date());
-    const diffMs = currentWeek.getTime() - earliestWeek.getTime();
-    return Math.max(1, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1);
+  private startOfPeriod(date: Date, period: PeriodMode): Date {
+    const normalized = new Date(date);
+    normalized.setHours(0, 0, 0, 0);
+    if (period === 'day') return normalized;
+    if (period === 'week') return this.startOfIsoWeek(normalized);
+    normalized.setDate(1);
+    return normalized;
   }
 
-  private renderBCFCreatedResolvedChart(period: '7w' | 'all' = '7w', withStagger: boolean = true): void {
-    const currentWeek = this.startOfIsoWeek(new Date());
-    const weeksToRender = period === 'all' ? this.getAvailableBcfWeeks() : 7;
-    const data: { label: string; created: number; resolved: number }[] = [];
-
-    for (let i = weeksToRender - 1; i >= 0; i--) {
-      const start = new Date(currentWeek);
-      start.setDate(start.getDate() - (i * 7));
-      const end = new Date(start);
-      end.setDate(end.getDate() + 7);
-
-      const created = this.allTopics.filter(t => {
-        const d = new Date(t.createdAt);
-        return d >= start && d < end;
-      }).length;
-      const resolved = this.allTopics.filter(t => {
-        if (t.status !== 'Resolved' && t.status !== 'Closed') return false;
-        const d = new Date(t.modifiedAt);
-        return d >= start && d < end;
-      }).length;
-
-      data.push({ label: start.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), created, resolved });
+  private addPeriods(date: Date, period: PeriodMode, amount: number): Date {
+    const next = new Date(date);
+    if (period === 'day') {
+      next.setDate(next.getDate() + amount);
+    } else if (period === 'week') {
+      next.setDate(next.getDate() + (amount * 7));
+    } else {
+      next.setMonth(next.getMonth() + amount);
+      next.setDate(1);
     }
-    const delay = withStagger ? this.getTileStartDelay('bcf-created-resolved') : 0;
-    this.chartsManager.createBCFCreatedResolvedChart('bcf-created-resolved-canvas', data, delay);
+    return this.startOfPeriod(next, period);
   }
 
-  private attachBcfCreatedResolvedPeriod(): void {
-    document.querySelectorAll('.bcf-cr-period-btn').forEach(btn => {
-      const boundBtn = btn as HTMLButtonElement;
-      if (boundBtn.dataset.bound === 'true') return;
-      boundBtn.dataset.bound = 'true';
-      btn.addEventListener('click', (e) => {
-        const target = e.currentTarget as HTMLButtonElement;
-        const period = (target.dataset.period as '7w' | 'all' | undefined) || '7w';
-        if (target.classList.contains('active')) return;
-        document.querySelectorAll('.bcf-cr-period-btn').forEach(b => b.classList.remove('active'));
-        target.classList.add('active');
-        this.renderBCFCreatedResolvedChart(period, false);
-      });
+  private getIsoWeekNumber(date: Date): number {
+    const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNr = target.getUTCDay() || 7;
+    target.setUTCDate(target.getUTCDate() + 4 - dayNr);
+    const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+    return Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  }
+
+  private formatPeriodLabel(date: Date, period: PeriodMode): string {
+    if (period === 'day') {
+      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+    }
+    if (period === 'week') {
+      return `${date.getFullYear()}-W${String(this.getIsoWeekNumber(date)).padStart(2, '0')}`;
+    }
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  private periodUnitLabel(period: PeriodMode, count: number, short: boolean = false): string {
+    if (period === 'day') return short ? 'j.' : (count > 1 ? 'jours' : 'jour');
+    if (period === 'week') return short ? 'sem.' : (count > 1 ? 'semaines' : 'semaine');
+    return short ? 'mois' : 'mois';
+  }
+
+  private getWindowStart(windowKey: string): Date | null {
+    const now = new Date();
+    const mapping: Record<string, number> = {
+      '7d': 7,
+      '30d': 30,
+      '90d': 90,
+      '180d': 180,
+    };
+    const days = mapping[windowKey];
+    if (!days) return null;
+    now.setDate(now.getDate() - days);
+    return now;
+  }
+
+  private getFileTypeCounts(): Record<string, number> {
+    const byExtension: Record<string, number> = {};
+    this.allFiles.forEach(file => {
+      const ext = (file.extension || 'other').toLowerCase();
+      byExtension[ext] = (byExtension[ext] || 0) + 1;
     });
+    return byExtension;
+  }
+
+  private getFileTypeFilterOptions(limit: number = 8): { value: string; label: string }[] {
+    return Object.entries(this.getFileTypeCounts())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([ext]) => ({ value: ext, label: ext.toUpperCase() }));
+  }
+
+  private getFileTypeColor(extension: string): string {
+    const palette: Record<string, string> = {
+      ifc: '#0063a3',
+      pdf: '#ef4444',
+      dwg: '#f59e0b',
+      rvt: '#10b981',
+      nwd: '#8b5cf6',
+      nwc: '#a855f7',
+      png: '#ec4899',
+      jpg: '#ec4899',
+      jpeg: '#ec4899',
+      zip: '#71717a',
+      rar: '#71717a',
+      html: '#f97316',
+      mp4: '#14b8a6',
+      docx: '#3b82f6',
+      doc: '#3b82f6',
+      xlsx: '#6366f1',
+      xls: '#6366f1',
+      txt: '#71717a',
+    };
+    return palette[extension.toLowerCase()] || '#94a3b8';
+  }
+
+  private getBCFStatusDataset(): { key: string; label: string; value: number; color: string }[] {
+    const settings = this.getTileSettings('bcf-status-donut');
+    const colors = settings.colors || DEFAULT_TILE_SETTINGS['bcf-status-donut'].colors;
+    const data: BCFStatusData = { open: 0, inProgress: 0, resolved: 0, closed: 0 };
+    this.allTopics.forEach(topic => {
+      if (topic.status === 'Open') data.open++;
+      else if (topic.status === 'In Progress') data.inProgress++;
+      else if (topic.status === 'Resolved') data.resolved++;
+      else data.closed++;
+    });
+
+    return [
+      { key: 'inProgress', label: 'En cours', value: data.inProgress, color: colors.inProgress },
+      { key: 'resolved', label: 'Waiting', value: data.resolved, color: colors.resolved },
+      { key: 'closed', label: 'Closed', value: data.closed, color: colors.closed },
+      { key: 'open', label: 'New', value: data.open, color: colors.open },
+    ];
+  }
+
+  private renderTreemap(containerId: string, items: { label: string; value: number; color: string }[], emptyLabel: string): void {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const visibleItems = items.filter(item => item.value > 0).sort((a, b) => b.value - a.value);
+    if (!visibleItems.length) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-state-text">${emptyLabel}</div></div>`;
+      return;
+    }
+
+    const total = visibleItems.reduce((sum, item) => sum + item.value, 0);
+
+    const layout = (
+      nodes: { label: string; value: number; color: string }[],
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      vertical: boolean,
+    ): string[] => {
+      if (!nodes.length) return [];
+      if (nodes.length === 1) {
+        const node = nodes[0];
+        return [`<div class="treemap-node" style="left:${x}%;top:${y}%;width:${width}%;height:${height}%;background:${node.color}">
+          <div class="treemap-node-content">
+            <span class="treemap-node-label">${this.esc(node.label)}</span>
+            <span class="treemap-node-value">${node.value}</span>
+          </div>
+        </div>`];
+      }
+
+      let splitIndex = 0;
+      let running = 0;
+      const half = nodes.reduce((sum, node) => sum + node.value, 0) / 2;
+      while (splitIndex < nodes.length - 1 && running < half) {
+        running += nodes[splitIndex].value;
+        splitIndex++;
+      }
+
+      const first = nodes.slice(0, splitIndex);
+      const second = nodes.slice(splitIndex);
+      const firstValue = first.reduce((sum, node) => sum + node.value, 0);
+      const ratio = firstValue / nodes.reduce((sum, node) => sum + node.value, 0);
+
+      if (vertical) {
+        const widthA = width * ratio;
+        return [
+          ...layout(first, x, y, widthA, height, !vertical),
+          ...layout(second, x + widthA, y, width - widthA, height, !vertical),
+        ];
+      }
+
+      const heightA = height * ratio;
+      return [
+        ...layout(first, x, y, width, heightA, !vertical),
+        ...layout(second, x, y + heightA, width, height - heightA, !vertical),
+      ];
+    };
+
+    container.innerHTML = `<div class="treemap-surface">${layout(visibleItems, 0, 0, 100, 100, true).join('')}</div>`;
+    container.setAttribute('data-total', String(total));
+  }
+
+  private getCumulativeDataForPeriod(period: PeriodMode): { label: string; cumulative: number }[] {
+    const counts = new Map<string, number>();
+    this.allFiles.forEach(file => {
+      const start = this.startOfPeriod(new Date(file.uploadedAt), period);
+      const key = start.toISOString();
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+
+    const sorted = Array.from(counts.entries()).sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime());
+    let cumulative = 0;
+    return sorted.map(([iso, count]) => {
+      cumulative += count;
+      return { label: this.formatPeriodLabel(new Date(iso), period), cumulative };
+    });
+  }
+
+  private getDepositFrequencyData(period: PeriodMode, range: RangeMode): { label: string; count: number }[] {
+    const fileDates = this.allFiles.map(file => new Date(file.uploadedAt)).filter(date => !Number.isNaN(date.getTime()));
+    const current = this.startOfPeriod(new Date(), period);
+    const desiredCount = range === 'all'
+      ? Math.max(1, fileDates.length ? this.getPeriodDistance(this.startOfPeriod(new Date(Math.min(...fileDates.map(date => date.getTime()))), period), current, period) + 1 : 1)
+      : range;
+
+    const data: { label: string; count: number }[] = [];
+    for (let i = desiredCount - 1; i >= 0; i--) {
+      const start = this.addPeriods(current, period, -i);
+      const end = this.addPeriods(start, period, 1);
+      const count = this.allFiles.filter(file => {
+        const uploadedAt = new Date(file.uploadedAt);
+        return uploadedAt >= start && uploadedAt < end;
+      }).length;
+      data.push({ label: this.formatPeriodLabel(start, period), count });
+    }
+    return data;
+  }
+
+  private getPeriodDistance(start: Date, end: Date, period: PeriodMode): number {
+    if (period === 'day') {
+      return Math.floor((end.getTime() - start.getTime()) / 86400000);
+    }
+    if (period === 'week') {
+      return Math.floor((end.getTime() - start.getTime()) / (7 * 86400000));
+    }
+    return ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth());
+  }
+
+  private getBCFCreatedResolvedData(period: PeriodMode): { label: string; created: number; resolved: number }[] {
+    const current = this.startOfPeriod(new Date(), period);
+    const points: { label: string; created: number; resolved: number }[] = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const start = this.addPeriods(current, period, -i);
+      const end = this.addPeriods(start, period, 1);
+      const created = this.allTopics.filter(topic => {
+        const createdAt = new Date(topic.createdAt);
+        return createdAt >= start && createdAt < end;
+      }).length;
+      const resolved = this.allTopics.filter(topic => {
+        if (topic.status !== 'Resolved' && topic.status !== 'Closed') return false;
+        const modifiedAt = new Date(topic.modifiedAt);
+        return modifiedAt >= start && modifiedAt < end;
+      }).length;
+      points.push({ label: this.formatPeriodLabel(start, period), created, resolved });
+    }
+
+    return points;
+  }
+
+  private renderBCFStatusTile(): void {
+    const settings = this.getTileSettings('bcf-status-donut');
+    const chartType = settings.chartType || 'treemap';
+    const items = this.getBCFStatusDataset();
+    const canvas = document.getElementById('bcf-status-donut-canvas') as HTMLCanvasElement | null;
+    const treemap = document.getElementById('bcf-status-treemap');
+
+    if (chartType === 'treemap') {
+      this.chartsManager.destroyChartByKey('bcfStatusDonut');
+      if (canvas) canvas.style.display = 'none';
+      if (treemap) treemap.style.display = 'block';
+      this.renderTreemap('bcf-status-treemap', items, 'Aucun statut');
+      return;
+    }
+
+    if (treemap) {
+      treemap.innerHTML = '';
+      treemap.style.display = 'none';
+    }
+    if (canvas) canvas.style.display = 'block';
+
+    const data: BCFStatusData = {
+      open: items.find(item => item.key === 'open')?.value || 0,
+      inProgress: items.find(item => item.key === 'inProgress')?.value || 0,
+      resolved: items.find(item => item.key === 'resolved')?.value || 0,
+      closed: items.find(item => item.key === 'closed')?.value || 0,
+    };
+
+    this.chartsManager.createBCFStatusDonutChart(
+      'bcf-status-donut-canvas',
+      data,
+      chartType,
+      (chartType === 'pie' || chartType === 'doughnut')
+        ? this.getCircularChartDelay('bcf-status-donut')
+        : this.getTileStartDelay('bcf-status-donut'),
+      {
+        open: items.find(item => item.key === 'open')?.color,
+        inProgress: items.find(item => item.key === 'inProgress')?.color,
+        resolved: items.find(item => item.key === 'resolved')?.color,
+        closed: items.find(item => item.key === 'closed')?.color,
+      },
+    );
+  }
+
+  private renderFileTypeTile(): void {
+    const settings = this.getTileSettings('filetype-chart');
+    const chartType = settings.chartType || 'treemap';
+    const byExtension = this.getFileTypeCounts();
+    const items = Object.entries(byExtension).map(([ext, value]) => ({
+      label: ext.toUpperCase(),
+      value,
+      color: this.getFileTypeColor(ext),
+    }));
+    const canvas = document.getElementById('filetype-canvas') as HTMLCanvasElement | null;
+    const treemap = document.getElementById('filetype-treemap');
+
+    if (chartType === 'treemap') {
+      this.chartsManager.destroyChartByKey('fileType');
+      if (canvas) canvas.style.display = 'none';
+      if (treemap) treemap.style.display = 'block';
+      this.renderTreemap('filetype-treemap', items, 'Aucun type de fichier');
+      return;
+    }
+
+    if (treemap) {
+      treemap.innerHTML = '';
+      treemap.style.display = 'none';
+    }
+    if (canvas) canvas.style.display = 'block';
+
+    this.chartsManager.createFileTypeChart(
+      'filetype-canvas',
+      byExtension,
+      chartType === 'column' ? 'bar' : chartType,
+      chartType === 'pie' || chartType === 'doughnut'
+        ? this.getCircularChartDelay('filetype-chart')
+        : this.getTileStartDelay('filetype-chart'),
+    );
+  }
+
+  private renderCumulativeChart(): void {
+    const settings = this.getTileSettings('cumulative-chart');
+    const period = (settings.period || 'month') as PeriodMode;
+    const chartType = settings.chartType || 'area';
+    const data = this.getCumulativeDataForPeriod(period);
+    this.chartsManager.createCumulativeChart(
+      'cumulative-canvas',
+      data,
+      chartType,
+      this.getTileStartDelay('cumulative-chart'),
+    );
+  }
+
+  private renderDepositFrequencyChart(): void {
+    const settings = this.getTileSettings('deposit-freq-chart');
+    const period = (settings.period || 'week') as PeriodMode;
+    const range = (settings.range || 26) as RangeMode;
+    const chartType = settings.chartType || 'bar';
+    const data = this.getDepositFrequencyData(period, range);
+    this.chartsManager.createDepositFrequencyChart(
+      'deposit-freq-canvas',
+      data,
+      chartType === 'column' ? 'bar' : chartType,
+      this.getTileStartDelay('deposit-freq-chart'),
+    );
+  }
+
+  private renderBCFCreatedResolvedChart(withStagger: boolean = true): void {
+    const settings = this.getTileSettings('bcf-created-resolved');
+    const period = (settings.period || 'week') as PeriodMode;
+    const chartType = settings.chartType || 'line';
+    const data = this.getBCFCreatedResolvedData(period);
+    const delay = withStagger ? this.getTileStartDelay('bcf-created-resolved') : 0;
+    this.chartsManager.createBCFCreatedResolvedChart('bcf-created-resolved-canvas', data, chartType, delay);
   }
 
   // =============================================
@@ -743,6 +1258,8 @@ export class Dashboard {
   private renderTopContributors(): void {
     const container = document.getElementById('top-contributors-list');
     if (!container) return;
+    const settings = this.getTileSettings('top-contributors');
+    const top = settings.top as TopMode;
 
     const byUploader: Record<string, number> = {};
     this.allFiles.forEach(f => {
@@ -751,7 +1268,8 @@ export class Dashboard {
       }
     });
 
-    const sorted = Object.entries(byUploader).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const sortedAll = Object.entries(byUploader).sort((a, b) => b[1] - a[1]);
+    const sorted = top === 'all' ? sortedAll : sortedAll.slice(0, top);
     if (!sorted.length) { container.innerHTML = '<div class="empty-state"><div class="empty-state-text">Aucun contributeur</div></div>'; return; }
 
     const max = sorted[0][1];
@@ -774,6 +1292,8 @@ export class Dashboard {
   private renderTopUpdatedFiles(): void {
     const tbody = document.getElementById('top-updated-files-body');
     if (!tbody) return;
+    const settings = this.getTileSettings('top-updated-files');
+    const top = (settings.top || 20) as TopMode;
 
     const fileVersions: Record<string, { file: ProjectFile; count: number }> = {};
     this.allFiles.forEach(f => {
@@ -790,7 +1310,7 @@ export class Dashboard {
 
     const sorted = Object.entries(fileVersions)
       .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 20);
+      .slice(0, top === 'all' ? undefined : top);
 
     if (!sorted.length) {
       tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><div class="empty-state-text">Aucun fichier</div></td></tr>';
@@ -819,11 +1339,13 @@ export class Dashboard {
   private renderOldestUnresolvedBCF(): void {
     const tbody = document.getElementById('oldest-bcf-body');
     if (!tbody) return;
+    const settings = this.getTileSettings('oldest-unresolved-bcf');
+    const top = (settings.top || 3) as TopMode;
 
     const unresolved = this.allTopics
       .filter(t => t.status !== 'Closed' && t.status !== 'Resolved')
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-      .slice(0, 5);
+      .slice(0, top === 'all' ? undefined : top);
 
     if (!unresolved.length) {
       tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">Aucun BCF non résolu</div></td></tr>';
@@ -852,8 +1374,8 @@ export class Dashboard {
   private renderRecentFilesTable(): void {
     const container = document.getElementById('recent-files-container');
     if (!container) return;
-
-    const sorted = [...this.allFiles].sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    const filtered = this.getRecentFilesFiltered();
+    const sorted = [...filtered].sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
     const totalPages = Math.ceil(sorted.length / this.PAGE_SIZE);
     const page = Math.min(this.recentFilesPage, totalPages || 1);
     const start = (page - 1) * this.PAGE_SIZE;
@@ -893,8 +1415,8 @@ export class Dashboard {
   private renderRecentBCFTable(): void {
     const container = document.getElementById('recent-bcf-container');
     if (!container) return;
-
-    const sorted = [...this.allTopics].sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+    const filtered = this.getRecentBcfFiltered();
+    const sorted = [...filtered].sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
     const totalPages = Math.ceil(sorted.length / this.PAGE_SIZE);
     const page = Math.min(this.recentBcfPage, totalPages || 1);
     const start = (page - 1) * this.PAGE_SIZE;
@@ -1200,27 +1722,388 @@ export class Dashboard {
     return weeks;
   }
 
-  private bcfCreatedResolvedPeriodSwitcher(): string {
-    return `<div class="bcf-cr-period-switcher" aria-label="Période du graphique BCF créés vs résolus">
-      <button class="bcf-cr-period-btn active" type="button" data-period="7w" title="Afficher les 7 dernières semaines">
-        <span class="bcf-cr-period-btn-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="3.5" width="12" height="10" rx="2"></rect>
-            <path d="M5 2v3M11 2v3M2 6.5h12"></path>
-          </svg>
-        </span>
-        <span class="bcf-cr-period-btn-label">7 sem.</span>
+  private formatResultsTitle(base: string, count: number): string {
+    return `${base} — ${count} résultat${count > 1 ? 's' : ''}`;
+  }
+
+  private getRecentFilesFiltered(): ProjectFile[] {
+    const settings = this.getTileSettings('recent-files-table');
+    const startDate = this.getWindowStart(settings.window || '30d');
+    const extension = settings.extension || 'all';
+    return this.allFiles.filter(file => {
+      const uploadedAt = new Date(file.uploadedAt);
+      if (startDate && uploadedAt < startDate) return false;
+      if (extension !== 'all' && (file.extension || 'other').toLowerCase() !== extension) return false;
+      return true;
+    });
+  }
+
+  private getRecentBcfFiltered(): BCFTopic[] {
+    const settings = this.getTileSettings('recent-bcf-table');
+    const startDate = this.getWindowStart(settings.window || '30d');
+    return this.allTopics.filter(topic => !startDate || new Date(topic.modifiedAt) >= startDate);
+  }
+
+  private tileSettingsPanelHtml(tileId: string, title: string, contentHtml: string, summaryText?: string): string {
+    const isOpen = this.openTileSettingsPanel === tileId;
+    return `<div class="tile-settings-wrapper">
+      ${summaryText ? `<span class="tile-summary-chip">${summaryText}</span>` : ''}
+      <button class="tile-settings-toggle ${isOpen ? 'active' : ''}" type="button" data-tile-id="${tileId}" aria-label="Ouvrir les réglages">
+        <i class="modus-icon mi-settings"></i>
       </button>
-      <button class="bcf-cr-period-btn" type="button" data-period="all" title="Afficher toute la période disponible">
-        <span class="bcf-cr-period-btn-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M2.5 8h11"></path>
-            <path d="M9.75 3.5 13.5 8l-3.75 4.5"></path>
-            <path d="M2.5 4.5v7"></path>
-          </svg>
-        </span>
-        <span class="bcf-cr-period-btn-label">Tout</span>
-      </button>
+      <div class="tile-settings-panel ${isOpen ? 'open' : ''}" data-tile-id="${tileId}">
+        <div class="tile-settings-header">
+          <h4>${this.esc(title)}</h4>
+          <button class="tile-settings-close" type="button" aria-label="Fermer">&times;</button>
+        </div>
+        ${contentHtml}
+      </div>
+    </div>`;
+  }
+
+  private settingsChoiceGroupHtml(
+    tileId: string,
+    settingKey: string,
+    label: string,
+    options: Array<{ value: string | number; label: string }>,
+    currentValue: string | number,
+  ): string {
+    return `<div class="tile-settings-group">
+      <div class="tile-settings-label">${label}</div>
+      <div class="tile-option-group">${options.map(option => `
+        <button
+          class="tile-option-btn ${String(currentValue) === String(option.value) ? 'active' : ''}"
+          type="button"
+          data-tile-id="${tileId}"
+          data-setting-key="${settingKey}"
+          data-setting-value="${option.value}"
+        >${option.label}</button>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  private bcfStatusColorSettingsHtml(): string {
+    const items = this.getBCFStatusDataset();
+    return `<div class="tile-settings-group">
+      <div class="tile-settings-label">Couleurs des statuts</div>
+      <div class="tile-color-list">${items.map(item => `
+        <label class="tile-color-row">
+          <input class="tile-color-input" type="color" value="${item.color}" data-tile-id="bcf-status-donut" data-color-key="${item.key}" />
+          <span class="tile-color-label">${this.esc(item.label)}</span>
+          <span class="tile-color-preview" style="background:${item.color}">${this.esc(item.label)}</span>
+        </label>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  private getSettingsEnabledTileMarkup(tileId: string): string {
+    switch (tileId) {
+      case 'bcf-status-donut':
+        return this.bcfStatusTileHtml();
+      case 'filetype-chart':
+        return this.fileTypeTileHtml();
+      case 'bcf-created-resolved':
+        return this.bcfCreatedResolvedTileHtml();
+      case 'cumulative-chart':
+        return this.cumulativeTileHtml();
+      case 'deposit-freq-chart':
+        return this.depositFrequencyTileHtml();
+      case 'top-contributors':
+        return this.topContributorsTileHtml();
+      case 'top-updated-files':
+        return this.topUpdatedFilesTileHtml();
+      case 'oldest-unresolved-bcf':
+        return this.oldestUnresolvedTileHtml();
+      case 'recent-files-table':
+        return this.recentFilesTileHtml();
+      case 'recent-bcf-table':
+        return this.recentBcfTileHtml();
+      default:
+        return '';
+    }
+  }
+
+  private bcfStatusTileHtml(): string {
+    const settings = this.getTileSettings('bcf-status-donut');
+    const panel = this.tileSettingsPanelHtml(
+      'bcf-status-donut',
+      'Réglages — BCF par statut',
+      [
+        this.settingsChoiceGroupHtml('bcf-status-donut', 'chartType', 'Forme du graphique', [
+          { value: 'pie', label: 'Camembert' },
+          { value: 'column', label: 'Colonnes' },
+          { value: 'bar', label: 'Barres' },
+          { value: 'treemap', label: 'Treemap' },
+          { value: 'radar', label: 'Radar' },
+        ], settings.chartType || 'treemap'),
+        this.bcfStatusColorSettingsHtml(),
+      ].join(''),
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>BCF par statut</h3>
+        ${panel}
+      </div>
+      <div class="card-content">
+        <div class="chart-container">
+          <canvas id="bcf-status-donut-canvas"></canvas>
+          <div id="bcf-status-treemap" class="treemap-container" style="display:none"></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  private fileTypeTileHtml(): string {
+    const settings = this.getTileSettings('filetype-chart');
+    const panel = this.tileSettingsPanelHtml(
+      'filetype-chart',
+      'Réglages',
+      this.settingsChoiceGroupHtml('filetype-chart', 'chartType', 'Type de graphique', [
+        { value: 'pie', label: 'Camembert' },
+        { value: 'doughnut', label: 'Donut' },
+        { value: 'column', label: 'Colonnes' },
+        { value: 'treemap', label: 'Treemap' },
+      ], settings.chartType || 'treemap'),
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>Fichiers par type</h3>
+        ${panel}
+      </div>
+      <div class="card-content">
+        <div class="chart-container">
+          <canvas id="filetype-canvas"></canvas>
+          <div id="filetype-treemap" class="treemap-container" style="display:none"></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  private bcfCreatedResolvedTileHtml(): string {
+    const settings = this.getTileSettings('bcf-created-resolved');
+    const period = (settings.period || 'week') as PeriodMode;
+    const panel = this.tileSettingsPanelHtml(
+      'bcf-created-resolved',
+      'Réglages',
+      [
+        this.settingsChoiceGroupHtml('bcf-created-resolved', 'chartType', 'Type de graphique', [
+          { value: 'line', label: 'Courbes' },
+          { value: 'area', label: 'Aires' },
+          { value: 'bar', label: 'Colonnes' },
+        ], settings.chartType || 'line'),
+        this.settingsChoiceGroupHtml('bcf-created-resolved', 'period', 'Période', [
+          { value: 'day', label: 'Jour' },
+          { value: 'week', label: 'Semaine' },
+          { value: 'month', label: 'Mois' },
+        ], period),
+      ].join(''),
+      `7 ${this.periodUnitLabel(period, 7, true)}`,
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>BCF créés vs résolus dans le temps</h3>
+        ${panel}
+      </div>
+      <div class="card-content"><div class="chart-container"><canvas id="bcf-created-resolved-canvas"></canvas></div></div>
+    </div>`;
+  }
+
+  private cumulativeTileHtml(): string {
+    const settings = this.getTileSettings('cumulative-chart');
+    const panel = this.tileSettingsPanelHtml(
+      'cumulative-chart',
+      'Réglages',
+      [
+        this.settingsChoiceGroupHtml('cumulative-chart', 'chartType', 'Type de graphique', [
+          { value: 'area', label: 'Aire' },
+          { value: 'line', label: 'Courbe' },
+          { value: 'bar', label: 'Colonnes' },
+        ], settings.chartType || 'area'),
+        this.settingsChoiceGroupHtml('cumulative-chart', 'period', 'Période', [
+          { value: 'day', label: 'Jour' },
+          { value: 'week', label: 'Semaine' },
+          { value: 'month', label: 'Mois' },
+        ], settings.period || 'month'),
+      ].join(''),
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>Fichiers déposés — évolution cumulative</h3>
+        ${panel}
+      </div>
+      <div class="card-content"><div class="chart-container chart-tall"><canvas id="cumulative-canvas"></canvas></div></div>
+    </div>`;
+  }
+
+  private depositFrequencyTitle(): string {
+    const settings = this.getTileSettings('deposit-freq-chart');
+    const period = (settings.period || 'week') as PeriodMode;
+    const range = (settings.range || 26) as RangeMode;
+    if (range === 'all') return 'Fréquence de dépôt (toute la période)';
+    return `Fréquence de dépôt (${range} dernières ${this.periodUnitLabel(period, range).toLowerCase()})`;
+  }
+
+  private depositFrequencyTileHtml(): string {
+    const settings = this.getTileSettings('deposit-freq-chart');
+    const period = (settings.period || 'week') as PeriodMode;
+    const panel = this.tileSettingsPanelHtml(
+      'deposit-freq-chart',
+      'Réglages',
+      [
+        this.settingsChoiceGroupHtml('deposit-freq-chart', 'chartType', 'Type de graphique', [
+          { value: 'bar', label: 'Colonnes' },
+          { value: 'line', label: 'Courbe' },
+        ], settings.chartType || 'bar'),
+        this.settingsChoiceGroupHtml('deposit-freq-chart', 'period', 'Période', [
+          { value: 'day', label: 'Jour' },
+          { value: 'week', label: 'Semaine' },
+          { value: 'month', label: 'Mois' },
+        ], period),
+        this.settingsChoiceGroupHtml('deposit-freq-chart', 'range', 'Plage affichée', [
+          { value: 12, label: `12 ${this.periodUnitLabel(period, 12, true)}` },
+          { value: 26, label: `26 ${this.periodUnitLabel(period, 26, true)}` },
+          { value: 52, label: `52 ${this.periodUnitLabel(period, 52, true)}` },
+          { value: 'all', label: 'Tout' },
+        ], settings.range || 26),
+      ].join(''),
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>${this.depositFrequencyTitle()}</h3>
+        ${panel}
+      </div>
+      <div class="card-content"><div class="chart-container chart-tall"><canvas id="deposit-freq-canvas"></canvas></div></div>
+    </div>`;
+  }
+
+  private topContributorsTileHtml(): string {
+    const settings = this.getTileSettings('top-contributors');
+    const top = settings.top as TopMode;
+    const label = top === 'all' ? 'Contributeurs (fichiers déposés)' : `Top ${top} contributeurs (fichiers déposés)`;
+    const panel = this.tileSettingsPanelHtml(
+      'top-contributors',
+      'Réglages',
+      this.settingsChoiceGroupHtml('top-contributors', 'top', 'Nombre à afficher', [
+        { value: 5, label: 'Top 5' },
+        { value: 10, label: 'Top 10' },
+        { value: 20, label: 'Top 20' },
+        { value: 'all', label: 'Tout' },
+      ], top || 'all'),
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>${label}</h3>
+        ${panel}
+      </div>
+      <div class="card-content"><div id="top-contributors-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div>
+    </div>`;
+  }
+
+  private topUpdatedFilesTileHtml(): string {
+    const settings = this.getTileSettings('top-updated-files');
+    const top = settings.top || 20;
+    const panel = this.tileSettingsPanelHtml(
+      'top-updated-files',
+      'Réglages',
+      this.settingsChoiceGroupHtml('top-updated-files', 'top', 'Nombre à afficher', [
+        { value: 5, label: 'Top 5' },
+        { value: 10, label: 'Top 10' },
+        { value: 20, label: 'Top 20' },
+      ], top),
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>Top ${top} — Fichiers les plus mis à jour (nouvelles versions)</h3>
+        ${panel}
+      </div>
+      <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
+        <thead><tr><th style="width:2rem">#</th><th>Nom</th><th style="width:8rem">Versions</th></tr></thead>
+        <tbody id="top-updated-files-body"><tr><td colspan="3" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
+      </table></div></div>
+    </div>`;
+  }
+
+  private oldestUnresolvedTileHtml(): string {
+    const settings = this.getTileSettings('oldest-unresolved-bcf');
+    const top = settings.top || 3;
+    const panel = this.tileSettingsPanelHtml(
+      'oldest-unresolved-bcf',
+      'Réglages',
+      this.settingsChoiceGroupHtml('oldest-unresolved-bcf', 'top', 'Nombre à afficher', [
+        { value: 3, label: 'Top 3' },
+        { value: 5, label: 'Top 5' },
+        { value: 10, label: 'Top 10' },
+      ], top),
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>Top ${top} — BCF non résolus les plus anciens</h3>
+        ${panel}
+      </div>
+      <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
+        <thead><tr><th>N°</th><th>Statut</th><th>Titre</th><th>Assigné à</th><th>Créé le</th><th>Âge</th></tr></thead>
+        <tbody id="oldest-bcf-body"><tr><td colspan="6" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
+      </table></div></div>
+    </div>`;
+  }
+
+  private recentFilesTileHtml(): string {
+    const settings = this.getTileSettings('recent-files-table');
+    const count = this.getRecentFilesFiltered().length;
+    const filterOptions = [{ value: 'all', label: 'Tous' }, ...this.getFileTypeFilterOptions()];
+    const panel = this.tileSettingsPanelHtml(
+      'recent-files-table',
+      'Réglages',
+      [
+        this.settingsChoiceGroupHtml('recent-files-table', 'window', 'Fenêtre temporelle', [
+          { value: '7d', label: '7j' },
+          { value: '30d', label: '30j' },
+          { value: '90d', label: '90j' },
+          { value: '180d', label: '180j' },
+          { value: 'all', label: 'Tout' },
+        ], settings.window || '30d'),
+        this.settingsChoiceGroupHtml('recent-files-table', 'extension', 'Filtre par type', filterOptions, settings.extension || 'all'),
+      ].join(''),
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>${this.formatResultsTitle('Fichiers récents', count)}</h3>
+        ${panel}
+      </div>
+      <div class="card-content" style="padding:0"><div id="recent-files-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div>
+    </div>`;
+  }
+
+  private recentBcfTileHtml(): string {
+    const settings = this.getTileSettings('recent-bcf-table');
+    const count = this.getRecentBcfFiltered().length;
+    const panel = this.tileSettingsPanelHtml(
+      'recent-bcf-table',
+      'Réglages',
+      this.settingsChoiceGroupHtml('recent-bcf-table', 'window', 'Fenêtre temporelle', [
+        { value: '7d', label: '7j' },
+        { value: '30d', label: '30j' },
+        { value: '90d', label: '90j' },
+        { value: '180d', label: '180j' },
+        { value: 'all', label: 'Tout' },
+      ], settings.window || '30d'),
+    );
+
+    return `<div class="card">
+      <div class="card-header">
+        <h3>${this.formatResultsTitle('BCF récents', count)}</h3>
+        ${panel}
+      </div>
+      <div class="card-content" style="padding:0"><div id="recent-bcf-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div>
     </div>`;
   }
 
@@ -1243,32 +2126,22 @@ export class Dashboard {
       'contributors-metric': this.metricHtml('contributors-val', 'Contributeurs', 'blue', 'people-group'),
       'resolution-rate-metric': this.metricHtml('resolution-rate-val', 'Taux résolution', 'teal', 'bar-graph'),
 
-      'cumulative-chart': `<div class="card"><div class="card-header"><h3>Fichiers déposés — évolution cumulatif</h3>${this.chartTypeSwitcher('cumulative', ['line', 'bar'])}</div><div class="card-content"><div class="chart-container chart-tall"><canvas id="cumulative-canvas"></canvas></div></div></div>`,
-      'deposit-freq-chart': `<div class="card"><div class="card-header"><h3>Fréquence de dépôt (26 dernières semaines)</h3>${this.chartTypeSwitcher('deposit-freq', ['bar', 'line'])}</div><div class="card-content"><div class="chart-container chart-tall"><canvas id="deposit-freq-canvas"></canvas></div></div></div>`,
-      'bcf-status-donut': `<div class="card"><div class="card-header"><h3>BCF par statut</h3>${this.chartTypeSwitcher('bcf-status', ['doughnut', 'bar', 'pie'])}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-status-donut-canvas"></canvas></div></div></div>`,
-      'bcf-created-resolved': `<div class="card"><div class="card-header"><h3>BCF créés vs résolus dans le temps</h3>${this.bcfCreatedResolvedPeriodSwitcher()}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-created-resolved-canvas"></canvas></div></div></div>`,
+      'cumulative-chart': this.cumulativeTileHtml(),
+      'deposit-freq-chart': this.depositFrequencyTileHtml(),
+      'bcf-status-donut': this.bcfStatusTileHtml(),
+      'bcf-created-resolved': this.bcfCreatedResolvedTileHtml(),
       'bcf-priority-chart': `<div class="card"><div class="card-header"><h3>BCF par priorité</h3>${this.chartTypeSwitcher('bcf-priority', ['doughnut', 'bar', 'pie'])}</div><div class="card-content"><div class="chart-container"><canvas id="bcf-priority-canvas"></canvas></div></div></div>`,
       'bcf-assignee-chart': `<div class="card"><div class="card-header"><h3>BCF par personne assignée</h3><span class="card-icon"><i class="modus-icon mi-people-group"></i></span></div><div class="card-content"><div id="bcf-assignee-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
-      'filetype-chart': `<div class="card"><div class="card-header"><h3>Fichiers par type</h3>${this.chartTypeSwitcher('filetype', ['pie', 'doughnut', 'bar'])}</div><div class="card-content"><div class="chart-container"><canvas id="filetype-canvas"></canvas></div></div></div>`,
-      'top-contributors': `<div class="card"><div class="card-header"><h3>Top contributeurs (fichiers déposés)</h3><span class="card-icon"><i class="modus-icon mi-people-group"></i></span></div><div class="card-content"><div id="top-contributors-list" class="hbar-list" style="padding:0.5rem 0"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+      'filetype-chart': this.fileTypeTileHtml(),
+      'top-contributors': this.topContributorsTileHtml(),
 
-      'top-updated-files': `<div class="card"><div class="card-header"><h3>Top 20 — Fichiers les plus mis à jour (nouvelles versions)</h3><span class="card-icon"><i class="modus-icon mi-upload"></i></span></div>
-        <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
-          <thead><tr><th style="width:2rem">#</th><th>Nom</th><th style="width:8rem">Versions</th></tr></thead>
-          <tbody id="top-updated-files-body"><tr><td colspan="3" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
-        </table></div></div></div>`,
+      'top-updated-files': this.topUpdatedFilesTileHtml(),
 
-      'oldest-unresolved-bcf': `<div class="card"><div class="card-header"><h3>Top 3 — BCF non résolus les plus anciens</h3><span class="card-icon"><i class="modus-icon mi-warning"></i></span></div>
-        <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
-          <thead><tr><th>N°</th><th>Statut</th><th>Titre</th><th>Assigné à</th><th>Créé le</th><th>Âge</th></tr></thead>
-          <tbody id="oldest-bcf-body"><tr><td colspan="6" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
-        </table></div></div></div>`,
+      'oldest-unresolved-bcf': this.oldestUnresolvedTileHtml(),
 
-      'recent-files-table': `<div class="card"><div class="card-header"><h3>Fichiers récents</h3><span class="card-icon"><i class="modus-icon mi-folder-open"></i></span></div>
-        <div class="card-content" style="padding:0"><div id="recent-files-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+      'recent-files-table': this.recentFilesTileHtml(),
 
-      'recent-bcf-table': `<div class="card"><div class="card-header"><h3>BCF récents</h3><span class="card-icon"><i class="modus-icon mi-clipboard"></i></span></div>
-        <div class="card-content" style="padding:0"><div id="recent-bcf-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+      'recent-bcf-table': this.recentBcfTileHtml(),
 
       'team': `<div class="card"><div class="card-header"><h3>Équipe projet</h3><span class="card-icon"><i class="modus-icon mi-people-group"></i></span></div>
         <div class="card-content"><div id="team-list" class="team-list"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,

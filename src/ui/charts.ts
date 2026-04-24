@@ -436,6 +436,10 @@ export class ChartsManager {
     if (c) { c.destroy(); this.charts.delete(key); }
   }
 
+  destroyChartByKey(key: string): void {
+    this.destroyChart(key);
+  }
+
   /**
    * During silent background refresh we update matching charts in place to
    * avoid the visible "flash / reload" caused by destroy+recreate.
@@ -629,7 +633,7 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating file type chart', { error }); }
   }
 
-  createCumulativeChart(canvasId: string, data: { label: string; cumulative: number }[], chartType: string = 'line', startDelay: number = 0): void {
+  createCumulativeChart(canvasId: string, data: { label: string; cumulative: number }[], chartType: string = 'area', startDelay: number = 0): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -660,7 +664,7 @@ export class ChartsManager {
         borderColor: lineColor,
         backgroundColor: gradient,
         borderWidth: 2.5,
-        fill: true,
+        fill: chartType === 'area',
         tension: 0.3,
         pointRadius: 4,
         pointBackgroundColor: lineColor,
@@ -740,13 +744,58 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating deposit frequency chart', { error }); }
   }
 
-  createBCFCreatedResolvedChart(canvasId: string, data: { label: string; created: number; resolved: number }[], startDelay: number = 0): void {
+  createBCFCreatedResolvedChart(
+    canvasId: string,
+    data: { label: string; created: number; resolved: number }[],
+    chartType: string = 'line',
+    startDelay: number = 0,
+  ): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const tc = themeColors();
+
+      if (chartType === 'bar') {
+        this.mountChart('bcfCreatedResolved', ctx, {
+          type: 'bar',
+          data: {
+            labels: data.map(d => d.label),
+            datasets: [
+              {
+                label: 'Créés',
+                data: data.map(d => d.created),
+                backgroundColor: COLORS.danger,
+                borderRadius: 6,
+                borderSkipped: false,
+                barPercentage: 0.55,
+              },
+              {
+                label: 'Résolus',
+                data: data.map(d => d.resolved),
+                backgroundColor: COLORS.success,
+                borderRadius: 6,
+                borderSkipped: false,
+                barPercentage: 0.55,
+              },
+            ],
+          },
+          options: {
+            ...this.barOpts(getBaseOpts(), startDelay),
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              ...(this.barOpts(getBaseOpts(), startDelay).plugins || {}),
+              legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12 }, color: tc.muted } },
+            },
+            scales: {
+              y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } },
+              x: { ticks: { color: tc.muted, font: { size: 10 } }, grid: { display: false }, border: { display: false } },
+            },
+          },
+        });
+        return;
+      }
 
       this.mountChart('bcfCreatedResolved', ctx, {
         type: 'line',
@@ -757,21 +806,23 @@ export class ChartsManager {
               label: 'Créés',
               data: data.map(d => d.created),
               borderColor: COLORS.danger,
-              backgroundColor: 'transparent',
+              backgroundColor: chartType === 'area' ? 'rgba(239, 68, 68, 0.18)' : 'transparent',
               borderWidth: 2,
               tension: 0.3,
               pointRadius: 3,
               pointBackgroundColor: COLORS.danger,
+              fill: chartType === 'area',
             },
             {
               label: 'Résolus',
               data: data.map(d => d.resolved),
               borderColor: COLORS.success,
-              backgroundColor: 'transparent',
+              backgroundColor: chartType === 'area' ? 'rgba(16, 185, 129, 0.18)' : 'transparent',
               borderWidth: 2,
               tension: 0.3,
               pointRadius: 3,
               pointBackgroundColor: COLORS.success,
+              fill: chartType === 'area',
             },
           ],
         },
@@ -791,7 +842,13 @@ export class ChartsManager {
     } catch (error) { logger.error('Error creating BCF created/resolved chart', { error }); }
   }
 
-  createBCFStatusDonutChart(canvasId: string, data: BCFStatusData, chartType: string = 'doughnut', startDelay: number = 0): void {
+  createBCFStatusDonutChart(
+    canvasId: string,
+    data: BCFStatusData,
+    chartType: string = 'doughnut',
+    startDelay: number = 0,
+    customColors?: Partial<Record<'open' | 'inProgress' | 'resolved' | 'closed', string>>,
+  ): void {
     try {
       const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
       if (!canvas) return;
@@ -801,14 +858,64 @@ export class ChartsManager {
       const total = data.open + data.inProgress + data.resolved + data.closed;
       const labels = ['Closed', 'New', 'Waiting', 'En cours'];
       const values = [data.closed, data.open, data.resolved, data.inProgress];
-      const colors = [COLORS.success, COLORS.blue, COLORS.warning, COLORS.accent];
+      const colors = [
+        customColors?.closed || COLORS.success,
+        customColors?.open || COLORS.blue,
+        customColors?.resolved || COLORS.warning,
+        customColors?.inProgress || COLORS.accent,
+      ];
       const pctCallback = (ctx: any) => { const v = ctx.parsed || ctx.parsed.y; const pct = total > 0 ? Math.round(((typeof v === 'number' ? v : ctx.parsed) / total) * 100) : 0; return ` ${ctx.label}: ${typeof v === 'number' ? v : ctx.parsed} (${pct}%)`; };
 
-      if (chartType === 'bar') {
+      if (chartType === 'column' || chartType === 'bar') {
+        const horizontal = chartType === 'bar';
         this.mountChart('bcfStatusDonut', ctx, {
           type: 'bar',
           data: { labels, datasets: [{ label: 'Topics', data: values, backgroundColor: colors, borderRadius: 8, borderSkipped: false, barPercentage: 0.55 }] },
-          options: { ...this.barOpts(getBaseOpts(), startDelay), plugins: { ...getBaseOpts().plugins, legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } }, x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } } } },
+          options: {
+            ...this.barOpts(getBaseOpts(), startDelay),
+            indexAxis: horizontal ? 'y' : 'x',
+            plugins: { ...getBaseOpts().plugins, legend: { display: false } },
+            scales: horizontal
+              ? {
+                x: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } },
+                y: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } },
+              }
+              : {
+                y: { beginAtZero: true, ticks: { color: tc.muted, font: { size: 11 } }, grid: { color: tc.grid }, border: { display: false } },
+                x: { ticks: { color: tc.muted, font: { size: 11 } }, grid: { display: false }, border: { display: false } },
+              },
+          },
+        });
+      } else if (chartType === 'radar') {
+        const baseRadar = this.animationsEnabled ? getBaseOpts() : withAnimation(getBaseOpts(), false);
+        this.mountChart('bcfStatusDonut', ctx, {
+          type: 'radar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Topics',
+              data: values,
+              borderColor: colors[0],
+              backgroundColor: isDark() ? 'rgba(76, 175, 80, 0.18)' : 'rgba(76, 175, 80, 0.12)',
+              pointBackgroundColor: colors,
+              pointBorderColor: colors,
+              pointRadius: 3,
+              borderWidth: 2,
+            }],
+          },
+          options: {
+            ...baseRadar,
+            plugins: { ...(baseRadar.plugins || {}), legend: { display: false }, tooltip: { ...getTooltipStyle(), callbacks: { label: pctCallback } } },
+            scales: {
+              r: {
+                beginAtZero: true,
+                angleLines: { color: tc.grid },
+                grid: { color: tc.grid },
+                pointLabels: { color: tc.muted, font: { size: 11 } },
+                ticks: { color: tc.muted, backdropColor: 'transparent' },
+              },
+            },
+          },
         });
       } else {
         const baseCircular = this.donutOpts(getBaseOpts(), startDelay);

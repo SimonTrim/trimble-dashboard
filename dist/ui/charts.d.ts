@@ -28,6 +28,7 @@ export declare class ChartsManager {
      */
     private barOpts;
     private destroyChart;
+    destroyChartByKey(key: string): void;
     /**
      * During silent background refresh we update matching charts in place to
      * avoid the visible "flash / reload" caused by destroy+recreate.
@@ -49,8 +50,8 @@ export declare class ChartsManager {
         label: string;
         created: number;
         resolved: number;
-    }[], startDelay?: number): void;
-    createBCFStatusDonutChart(canvasId: string, data: BCFStatusData, chartType?: string, startDelay?: number): void;
+    }[], chartType?: string, startDelay?: number): void;
+    createBCFStatusDonutChart(canvasId: string, data: BCFStatusData, chartType?: string, startDelay?: number, customColors?: Partial<Record<'open' | 'inProgress' | 'resolved' | 'closed', string>>): void;
     destroy(): void;
 }
 //# sourceMappingURL=charts.d.ts.map
