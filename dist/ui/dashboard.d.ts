@@ -31,6 +31,7 @@ export declare class Dashboard {
     private loadTileSettings;
     private saveTileSettings;
     private getTileSettings;
+    private formatIsoDate;
     private updateTileSetting;
     private updateTileColorSetting;
     render(): Promise<void>;
@@ -83,7 +84,6 @@ export declare class Dashboard {
     private startOfIsoWeek;
     private startOfPeriod;
     private addPeriods;
-    private getIsoWeekNumber;
     private formatPeriodLabel;
     private periodUnitLabel;
     private getWindowStart;
@@ -95,6 +95,10 @@ export declare class Dashboard {
     private getCumulativeDataForPeriod;
     private getDepositFrequencyData;
     private getPeriodDistance;
+    private getAvailableTopicPeriodCount;
+    private getBCFCreatedResolvedRangeCount;
+    private getBCFCreatedResolvedSummaryLabel;
+    private bcfCreatedResolvedRangeSliderHtml;
     private getBCFCreatedResolvedData;
     private renderBCFStatusTile;
     private renderFileTypeTile;

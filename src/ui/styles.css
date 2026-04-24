@@ -789,6 +789,29 @@ body {
   font-weight: 700;
 }
 
+.time-range-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.time-range-slider-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.tile-range-input {
+  width: 100%;
+  margin: 0;
+  accent-color: #0ea5e9;
+  cursor: pointer;
+}
+
 .treemap-container {
   position: absolute;
   inset: 0;

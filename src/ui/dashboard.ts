@@ -84,6 +84,7 @@ const DEFAULT_TILE_SETTINGS: TileSettingsMap = {
   'bcf-created-resolved': {
     chartType: 'line',
     period: 'week',
+    rangeCount: 7,
   },
   'cumulative-chart': {
     chartType: 'area',
@@ -243,6 +244,13 @@ export class Dashboard {
       this.tileSettings[tileId] = { ...(DEFAULT_TILE_SETTINGS[tileId] || {}) };
     }
     return this.tileSettings[tileId];
+  }
+
+  private formatIsoDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   private updateTileSetting(tileId: string, key: string, value: any): void {
@@ -597,6 +605,19 @@ export class Dashboard {
       });
     });
 
+    scope.querySelectorAll('.tile-range-input').forEach(input => {
+      const boundInput = input as HTMLInputElement;
+      if (boundInput.dataset.bound === 'true') return;
+      boundInput.dataset.bound = 'true';
+      boundInput.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const tileId = boundInput.dataset.tileId;
+        const key = boundInput.dataset.settingKey;
+        if (!tileId || !key) return;
+        this.updateTileSetting(tileId, key, Number(boundInput.value));
+      });
+    });
+
     if (!this.globalTileSettingsEventsAttached) {
       document.addEventListener('click', (e) => {
         if (!this.openTileSettingsPanel) return;
@@ -877,22 +898,8 @@ export class Dashboard {
     return this.startOfPeriod(next, period);
   }
 
-  private getIsoWeekNumber(date: Date): number {
-    const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNr = target.getUTCDay() || 7;
-    target.setUTCDate(target.getUTCDate() + 4 - dayNr);
-    const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
-    return Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  }
-
   private formatPeriodLabel(date: Date, period: PeriodMode): string {
-    if (period === 'day') {
-      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-    }
-    if (period === 'week') {
-      return `${date.getFullYear()}-W${String(this.getIsoWeekNumber(date)).padStart(2, '0')}`;
-    }
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    return this.formatIsoDate(this.startOfPeriod(date, period));
   }
 
   private periodUnitLabel(period: PeriodMode, count: number, short: boolean = false): string {
@@ -1083,11 +1090,62 @@ export class Dashboard {
     return ((end.getFullYear() - start.getFullYear()) * 12) + (end.getMonth() - start.getMonth());
   }
 
-  private getBCFCreatedResolvedData(period: PeriodMode): { label: string; created: number; resolved: number }[] {
+  private getAvailableTopicPeriodCount(period: PeriodMode): number {
+    const timestamps = this.allTopics.flatMap(topic => {
+      const values: number[] = [];
+      const created = new Date(topic.createdAt).getTime();
+      const modified = new Date(topic.modifiedAt).getTime();
+      if (!Number.isNaN(created)) values.push(created);
+      if (!Number.isNaN(modified)) values.push(modified);
+      return values;
+    });
+
+    if (!timestamps.length) return 1;
+
+    const earliest = this.startOfPeriod(new Date(Math.min(...timestamps)), period);
+    const current = this.startOfPeriod(new Date(), period);
+    return Math.max(1, this.getPeriodDistance(earliest, current, period) + 1);
+  }
+
+  private getBCFCreatedResolvedRangeCount(period: PeriodMode): number {
+    const settings = this.getTileSettings('bcf-created-resolved');
+    const available = this.getAvailableTopicPeriodCount(period);
+    const fallback = Math.min(7, available);
+    const requested = Number(settings.rangeCount || fallback);
+    return Math.min(Math.max(1, requested), available);
+  }
+
+  private getBCFCreatedResolvedSummaryLabel(period: PeriodMode): string {
+    const count = this.getBCFCreatedResolvedRangeCount(period);
+    return `${count} ${this.periodUnitLabel(period, count, true)}`;
+  }
+
+  private bcfCreatedResolvedRangeSliderHtml(period: PeriodMode): string {
+    const available = this.getAvailableTopicPeriodCount(period);
+    const current = this.getBCFCreatedResolvedRangeCount(period);
+    return `<div class="time-range-slider" aria-label="Plage du graphique BCF créés vs résolus">
+      <div class="time-range-slider-labels">
+        <span>1 ${this.periodUnitLabel(period, 1, true)}</span>
+        <span>Tout</span>
+      </div>
+      <input
+        class="tile-range-input"
+        type="range"
+        min="1"
+        max="${available}"
+        step="1"
+        value="${current}"
+        data-tile-id="bcf-created-resolved"
+        data-setting-key="rangeCount"
+      />
+    </div>`;
+  }
+
+  private getBCFCreatedResolvedData(period: PeriodMode, rangeCount: number): { label: string; created: number; resolved: number }[] {
     const current = this.startOfPeriod(new Date(), period);
     const points: { label: string; created: number; resolved: number }[] = [];
 
-    for (let i = 6; i >= 0; i--) {
+    for (let i = rangeCount - 1; i >= 0; i--) {
       const start = this.addPeriods(current, period, -i);
       const end = this.addPeriods(start, period, 1);
       const created = this.allTopics.filter(topic => {
@@ -1216,7 +1274,8 @@ export class Dashboard {
     const settings = this.getTileSettings('bcf-created-resolved');
     const period = (settings.period || 'week') as PeriodMode;
     const chartType = settings.chartType || 'line';
-    const data = this.getBCFCreatedResolvedData(period);
+    const rangeCount = this.getBCFCreatedResolvedRangeCount(period);
+    const data = this.getBCFCreatedResolvedData(period, rangeCount);
     const delay = withStagger ? this.getTileStartDelay('bcf-created-resolved') : 0;
     this.chartsManager.createBCFCreatedResolvedChart('bcf-created-resolved-canvas', data, chartType, delay);
   }
@@ -1899,7 +1958,7 @@ export class Dashboard {
           { value: 'month', label: 'Mois' },
         ], period),
       ].join(''),
-      `7 ${this.periodUnitLabel(period, 7, true)}`,
+      this.getBCFCreatedResolvedSummaryLabel(period),
     );
 
     return `<div class="card">
@@ -1907,7 +1966,10 @@ export class Dashboard {
         <h3>BCF créés vs résolus dans le temps</h3>
         ${panel}
       </div>
-      <div class="card-content"><div class="chart-container"><canvas id="bcf-created-resolved-canvas"></canvas></div></div>
+      <div class="card-content">
+        ${this.bcfCreatedResolvedRangeSliderHtml(period)}
+        <div class="chart-container"><canvas id="bcf-created-resolved-canvas"></canvas></div>
+      </div>
     </div>`;
   }
 

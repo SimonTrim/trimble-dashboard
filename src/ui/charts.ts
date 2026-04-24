@@ -643,12 +643,14 @@ export class ChartsManager {
       const resolvedChartType = chartType === 'bar' || chartType === 'column' ? 'bar' : 'line';
       const isAreaChart = chartType === 'area';
 
-      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 200);
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 220);
       if (isDark()) {
-        gradient.addColorStop(0, 'rgba(14, 165, 233, 0.35)');
+        gradient.addColorStop(0, 'rgba(14, 165, 233, 0.42)');
+        gradient.addColorStop(0.58, 'rgba(14, 165, 233, 0.14)');
         gradient.addColorStop(1, 'rgba(14, 165, 233, 0)');
       } else {
-        gradient.addColorStop(0, 'rgba(0, 99, 163, 0.2)');
+        gradient.addColorStop(0, 'rgba(0, 99, 163, 0.28)');
+        gradient.addColorStop(0.58, 'rgba(0, 99, 163, 0.1)');
         gradient.addColorStop(1, 'rgba(0, 99, 163, 0)');
       }
       const lineColor = isDark() ? '#0ea5e9' : '#0063a3';
@@ -665,10 +667,10 @@ export class ChartsManager {
         data: data.map(d => d.cumulative),
         borderColor: lineColor,
         backgroundColor: gradient,
-        borderWidth: 2.5,
+        borderWidth: 2.2,
         fill: isAreaChart,
-        tension: 0.3,
-        pointRadius: 4,
+        tension: 0.32,
+        pointRadius: isAreaChart ? 0 : 4,
         pointBackgroundColor: lineColor,
         pointBorderColor: isDark() ? '#111827' : '#ffffff',
         pointBorderWidth: 2,
