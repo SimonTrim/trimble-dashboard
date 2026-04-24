@@ -640,6 +640,8 @@ export class ChartsManager {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       const tc = themeColors();
+      const resolvedChartType = chartType === 'bar' || chartType === 'column' ? 'bar' : 'line';
+      const isAreaChart = chartType === 'area';
 
       const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 200);
       if (isDark()) {
@@ -651,7 +653,7 @@ export class ChartsManager {
       }
       const lineColor = isDark() ? '#0ea5e9' : '#0063a3';
 
-      const dataset = chartType === 'bar' ? {
+      const dataset = resolvedChartType === 'bar' ? {
         label: 'Total cumulé',
         data: data.map(d => d.cumulative),
         backgroundColor: lineColor,
@@ -664,7 +666,7 @@ export class ChartsManager {
         borderColor: lineColor,
         backgroundColor: gradient,
         borderWidth: 2.5,
-        fill: chartType === 'area',
+        fill: isAreaChart,
         tension: 0.3,
         pointRadius: 4,
         pointBackgroundColor: lineColor,
@@ -673,12 +675,12 @@ export class ChartsManager {
         pointHoverRadius: 6,
       };
 
-      const animOpts = chartType === 'bar'
+      const animOpts = resolvedChartType === 'bar'
         ? this.barOpts(getBaseOpts(), startDelay)
         : this.lineOpts(getBaseOpts(), startDelay);
 
       this.mountChart('cumulative', ctx, {
-        type: chartType as any,
+        type: resolvedChartType as any,
         data: { labels: data.map(d => d.label), datasets: [dataset as any] },
         options: {
           ...animOpts,
