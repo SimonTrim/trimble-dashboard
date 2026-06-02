@@ -1498,11 +1498,6 @@ body {
 /* ============================================
    DARK MODE — ADVANCED EFFECTS
    ============================================ */
-@keyframes shimmer-sweep {
-  0% { transform: translateX(-100%) rotate(15deg); }
-  100% { transform: translateX(200%) rotate(15deg); }
-}
-
 @keyframes pulse-glow {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
@@ -1511,28 +1506,6 @@ body {
 @keyframes border-glow-rotate {
   0% { --glow-angle: 0deg; }
   100% { --glow-angle: 360deg; }
-}
-
-[data-theme="dark"] .tile:hover > .card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 2;
-}
-
-[data-theme="dark"] .tile:hover > .card::after {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(56, 189, 248, 0.07) 45%,
-    rgba(139, 92, 246, 0.05) 55%,
-    transparent 100%
-  );
-  animation: shimmer-sweep 1.2s ease-in-out;
-  animation-fill-mode: forwards;
 }
 
 [data-theme="dark"] .metric-card .metric-icon-wrapper {
