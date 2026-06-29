@@ -164,6 +164,8 @@ export declare class Dashboard {
     private openProjectFile;
     private attachFileRowClicks;
     private attachCrChantierRowClicks;
+    private attachBcfRowClicks;
+    private attachViewClicks;
     private tileSettingsPanelHtml;
     private settingsChoiceGroupHtml;
     private bcfStatusColorSettingsHtml;

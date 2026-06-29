@@ -1,5 +1,5 @@
 /**
- * Helpers for opening files in Trimble Connect web viewers.
+ * Helpers for opening resources in Trimble Connect web viewers.
  */
 
 export function mapProjectLocationToWebRegion(location?: string): string {
@@ -9,6 +9,18 @@ export function mapProjectLocationToWebRegion(location?: string): string {
   if (loc === 'ap' || loc === 'asia') return 'asia';
   if (loc === 'ap-au' || loc === 'australia') return 'australia';
   return loc;
+}
+
+const VIEWER_3D_EXTENSIONS = new Set([
+  'ifc', 'rvt', 'skp', 'nwd', 'nwc', '3dm', 'obj', 'fbx', 'stp', 'step', 'dgn',
+]);
+
+export function is3DModelExtension(extension?: string): boolean {
+  return VIEWER_3D_EXTENSIONS.has((extension || '').toLowerCase());
+}
+
+function appendRegion(params: URLSearchParams, webRegion?: string): void {
+  if (webRegion) params.set('region', webRegion);
 }
 
 export function build2DViewerUrl(
@@ -22,8 +34,38 @@ export function build2DViewerUrl(
     type: 'revisions',
     etag: versionId,
   });
-  if (webRegion) params.set('region', webRegion);
+  appendRegion(params, webRegion);
   return `https://web.connect.trimble.com/projects/${encodeURIComponent(projectId)}/viewer/2D?${params.toString()}`;
+}
+
+export function build3DModelViewerUrl(
+  projectId: string,
+  modelId: string,
+  webRegion?: string,
+): string {
+  const params = new URLSearchParams({ modelId });
+  appendRegion(params, webRegion);
+  return `https://web.connect.trimble.com/projects/${encodeURIComponent(projectId)}/viewer/3d/?${params.toString()}`;
+}
+
+export function buildBcfTopicViewerUrl(
+  projectId: string,
+  topicId: string,
+  webRegion?: string,
+): string {
+  const params = new URLSearchParams({ topicId });
+  appendRegion(params, webRegion);
+  return `https://web.connect.trimble.com/projects/${encodeURIComponent(projectId)}/viewer/3d/?${params.toString()}`;
+}
+
+export function buildSavedViewUrl(
+  projectId: string,
+  viewId: string,
+  webRegion?: string,
+): string {
+  const params = new URLSearchParams({ viewId });
+  appendRegion(params, webRegion);
+  return `https://web.connect.trimble.com/projects/${encodeURIComponent(projectId)}/viewer/3d/?${params.toString()}`;
 }
 
 /**

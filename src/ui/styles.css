@@ -1540,6 +1540,7 @@ body {
   border-radius: var(--radius-sm);
   padding: 0.5rem;
   transition: all 0.15s;
+  cursor: pointer;
 }
 .view-item:hover {
   border-color: var(--trimble-primary);

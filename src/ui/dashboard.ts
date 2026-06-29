@@ -17,6 +17,7 @@ import { ChartsManager } from './charts';
 import { logger } from '../utils/logger';
 import { errorHandler } from '../utils/errorHandler';
 import { normalizeFilePath } from '../utils/filePath';
+import { openBcfTopicInViewer, openSavedViewInViewer } from '../api/fileNavigationService';
 import './styles.css';
 
 // =============================================
@@ -1542,12 +1543,15 @@ export class Dashboard {
       const ext = (file.extension || '').toLowerCase();
       const pct = maxVer > 0 ? Math.round((count / maxVer) * 100) : 0;
       const color = barColors[i % barColors.length];
-      return `<tr>
+      return `<tr class="clickable-row" data-file-id="${this.esc(file.id)}" title="Ouvrir dans Trimble Connect">
         <td style="width:2rem;text-align:center;font-weight:700;color:var(--muted-foreground)">${i + 1}</td>
         <td><span class="badge-ext ${ext || 'default'}">${ext || '?'}</span> <span class="file-name" title="${this.esc(name)}">${this.esc(this.truncate(name, 80))}</span></td>
         <td style="width:8rem"><div class="version-bar"><div class="version-bar-fill" style="width:${pct}%;background:${color};--reveal-delay:${Math.min(700, i * 55)}ms"></div><span class="version-bar-label">${count}v</span></div></td>
       </tr>`;
     }).join('');
+
+    const table = tbody.closest('table');
+    if (table) this.attachFileRowClicks(table);
   }
 
   // =============================================
@@ -1574,7 +1578,7 @@ export class Dashboard {
       const age = Math.floor((Date.now() - new Date(t.createdAt).getTime()) / 86400000);
       const statusCls = this.statusCls(t.status);
       const ageColor = age > 30 ? '#ef4444' : age > 14 ? '#f59e0b' : '#10b981';
-      return `<tr>
+      return `<tr class="clickable-row" data-topic-id="${this.esc(t.id)}" title="Ouvrir le BCF dans Trimble Connect">
         <td style="white-space:nowrap;font-weight:600;color:var(--trimble-primary)">${this.esc(t.id.substring(0, 8))}</td>
         <td><span class="badge badge-${statusCls}">${t.status}</span></td>
         <td>${this.truncate(this.esc(t.title), 50)}</td>
@@ -1583,6 +1587,9 @@ export class Dashboard {
         <td style="white-space:nowrap"><span style="font-weight:700;color:${ageColor}">${age}j</span></td>
       </tr>`;
     }).join('');
+
+    const table = tbody.closest('table');
+    if (table) this.attachBcfRowClicks(table);
   }
 
   // =============================================
@@ -1654,7 +1661,7 @@ export class Dashboard {
         <thead><tr><th>N°</th><th>Statut</th><th>Titre</th><th>Assigné à</th><th>Créé le</th></tr></thead>
         <tbody>${pageTopics.map(t => {
           const statusCls = this.statusCls(t.status);
-          return `<tr class="clickable-row">
+          return `<tr class="clickable-row" data-topic-id="${this.esc(t.id)}" title="Ouvrir le BCF dans Trimble Connect">
             <td style="font-weight:600;color:var(--trimble-primary);white-space:nowrap">${this.esc(t.id.substring(0, 8))}</td>
             <td><span class="badge badge-${statusCls}">${t.status}</span></td>
             <td>${this.truncate(this.esc(t.title), 60)}</td>
@@ -1663,9 +1670,10 @@ export class Dashboard {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <div class="click-hint">Cliquez sur un BCF pour l'ouvrir dans Trimble Connect</div>`;
+      <div class="click-hint">Cliquez sur un BCF pour l'ouvrir dans la visionneuse 3D Trimble Connect</div>`;
 
     this.attachPagination('recent-bcf', totalPages, (p) => { this.recentBcfPage = p; this.renderRecentBCFTable(); });
+    this.attachBcfRowClicks(container);
   }
 
   // =============================================
@@ -1790,12 +1798,13 @@ export class Dashboard {
       return;
     }
     c.innerHTML = views.map(v => {
-      return `<div class="view-item">
+      return `<div class="view-item" data-view-id="${this.esc(v.id)}" title="Ouvrir la vue dans la visionneuse 3D Trimble Connect">
         <div class="view-thumbnail" data-view-id="${v.id}"><span class="thumb-loading"><i class="modus-icon mi-visibility-on"></i></span></div>
         <div class="view-name" title="${this.esc(v.name)}">${this.esc(v.name)}</div>
         <div class="view-meta">${this.esc(v.createdBy)} · ${this.fmtDate(v.createdAt)}</div>
       </div>`;
     }).join('');
+    this.attachViewClicks(c);
   }
 
   private async loadThumbnails(): Promise<void> {
@@ -2186,6 +2195,32 @@ export class Dashboard {
     this.attachFileRowClicks(container);
   }
 
+  private attachBcfRowClicks(container: HTMLElement): void {
+    container.querySelectorAll('tr[data-topic-id]').forEach(row => {
+      const bound = row as HTMLElement;
+      if (bound.dataset.bound === 'true') return;
+      bound.dataset.bound = 'true';
+      row.addEventListener('click', () => {
+        const topicId = bound.dataset.topicId;
+        const topic = this.allTopics.find(t => t.id === topicId);
+        if (topic) void openBcfTopicInViewer(topic);
+      });
+    });
+  }
+
+  private attachViewClicks(container: HTMLElement): void {
+    container.querySelectorAll('.view-item[data-view-id]').forEach(item => {
+      const bound = item as HTMLElement;
+      if (bound.dataset.bound === 'true') return;
+      bound.dataset.bound = 'true';
+      bound.addEventListener('click', () => {
+        const viewId = bound.dataset.viewId;
+        const view = this.allViews.find(v => v.id === viewId);
+        if (view) void openSavedViewInViewer(view);
+      });
+    });
+  }
+
   private tileSettingsPanelHtml(tileId: string, title: string, contentHtml: string, summaryText?: string): string {
     const isOpen = this.openTileSettingsPanel === tileId;
     return `<div class="tile-settings-wrapper">
@@ -2476,7 +2511,8 @@ export class Dashboard {
       <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
         <thead><tr><th style="width:2rem">#</th><th>Nom</th><th style="width:8rem">Versions</th></tr></thead>
         <tbody id="top-updated-files-body"><tr><td colspan="3" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
-      </table></div></div>
+      </table></div>
+      <div class="click-hint">Cliquez sur un fichier pour l'ouvrir dans Trimble Connect</div></div>
     </div>`;
   }
 
@@ -2501,7 +2537,8 @@ export class Dashboard {
       <div class="card-content" style="padding:0"><div class="table-wrapper"><table class="table">
         <thead><tr><th>N°</th><th>Statut</th><th>Titre</th><th>Assigné à</th><th>Créé le</th><th>Âge</th></tr></thead>
         <tbody id="oldest-bcf-body"><tr><td colspan="6" class="text-center" style="padding:1rem;color:var(--muted-foreground)">Chargement...</td></tr></tbody>
-      </table></div></div>
+      </table></div>
+      <div class="click-hint">Cliquez sur un BCF pour l'ouvrir dans la visionneuse 3D Trimble Connect</div></div>
     </div>`;
   }
 
@@ -2657,7 +2694,8 @@ export class Dashboard {
         <div class="card-content"><div id="timeline" class="timeline"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
 
       'views': `<div class="card"><div class="card-header"><h3>Vues 3D sauvegardées</h3><span class="card-icon"><i class="modus-icon mi-visibility-on"></i></span></div>
-        <div class="card-content"><div id="views-grid" class="views-grid"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div></div>`,
+        <div class="card-content"><div id="views-grid" class="views-grid"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div>
+        <div class="click-hint">Cliquez sur une vue pour l'ouvrir dans la visionneuse 3D Trimble Connect</div></div></div>`,
     };
 
     const categories = ['Métriques', 'Graphiques', 'Tableaux', 'Projet'];
