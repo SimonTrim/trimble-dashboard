@@ -111,6 +111,8 @@ export declare class Dashboard {
     private renderOldestUnresolvedBCF;
     private renderRecentFilesTable;
     private renderRecentBCFTable;
+    private renderCrChantierList;
+    private renderCrChantierSuivi;
     private paginationHtml;
     private attachPagination;
     private renderViewsSection;
@@ -138,6 +140,14 @@ export declare class Dashboard {
     private formatResultsTitle;
     private getRecentFilesFiltered;
     private getRecentBcfFiltered;
+    private parseCrDateFromName;
+    private getCrChantierFolderName;
+    private isCrChantierFile;
+    private getCrChantierEntries;
+    private getCrAgeTag;
+    private getCrSuiviSummary;
+    private openProjectFile;
+    private attachCrChantierRowClicks;
     private tileSettingsPanelHtml;
     private settingsChoiceGroupHtml;
     private bcfStatusColorSettingsHtml;
@@ -151,6 +161,8 @@ export declare class Dashboard {
     private topContributorsTileHtml;
     private topUpdatedFilesTileHtml;
     private oldestUnresolvedTileHtml;
+    private crChantierListTileHtml;
+    private crChantierSuiviTileHtml;
     private recentFilesTileHtml;
     private recentBcfTileHtml;
     private getTemplate;

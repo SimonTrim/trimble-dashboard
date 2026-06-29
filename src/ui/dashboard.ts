@@ -34,6 +34,9 @@ const TILE_DEFS: TileDef[] = [
   { id: 'contributors-metric',      label: 'Contributeurs',     icon: 'people-group',     size: 1, cat: 'Métriques' },
   { id: 'resolution-rate-metric',   label: 'Taux résolution',   icon: 'bar-graph',        size: 1, cat: 'Métriques' },
 
+  { id: 'cr-chantier-list',         label: 'Compte rendu chantier', icon: 'clipboard',   size: 2, cat: 'Tableaux' },
+  { id: 'cr-chantier-suivi',        label: 'Suivi CR chantier', icon: 'calendar',         size: 2, cat: 'Tableaux' },
+
   { id: 'cumulative-chart',         label: 'Fichiers déposés — évolution cumulatif',  icon: 'line-graph', size: 2, cat: 'Graphiques' },
   { id: 'deposit-freq-chart',       label: 'Fréquence de dépôt (26 dernières semaines)', icon: 'bar-graph', size: 2, cat: 'Graphiques' },
   { id: 'bcf-status-donut',         label: 'BCF par statut',    icon: 'dashboard',        size: 1, cat: 'Graphiques' },
@@ -111,6 +114,13 @@ const DEFAULT_TILE_SETTINGS: TileSettingsMap = {
   'recent-bcf-table': {
     window: '30d',
   },
+  'cr-chantier-list': {
+    folderName: 'CR Chantier',
+    top: 10,
+  },
+  'cr-chantier-suivi': {
+    frequencyDays: 7,
+  },
 };
 
 // =============================================
@@ -185,7 +195,19 @@ export class Dashboard {
         const cfg = JSON.parse(raw) as TileConfig;
         const known = new Set(DEFAULT_ORDER);
         const order = cfg.order.filter((id: string) => known.has(id));
-        DEFAULT_ORDER.forEach(id => { if (!order.includes(id)) order.push(id); });
+        const missing = DEFAULT_ORDER.filter(id => !order.includes(id));
+        for (const id of missing) {
+          const defaultIdx = DEFAULT_ORDER.indexOf(id);
+          let insertAt = order.length;
+          for (let i = defaultIdx - 1; i >= 0; i--) {
+            const prevPos = order.indexOf(DEFAULT_ORDER[i]);
+            if (prevPos >= 0) {
+              insertAt = prevPos + 1;
+              break;
+            }
+          }
+          order.splice(insertAt, 0, id);
+        }
         return { order, hidden: cfg.hidden || [] };
       }
     } catch (e) { /* ignore */ }
@@ -261,6 +283,9 @@ export class Dashboard {
     }
     if (tileId === 'recent-bcf-table' && key === 'window') {
       this.recentBcfPage = 1;
+    }
+    if (tileId === 'cr-chantier-list' && (key === 'folderName' || key === 'top')) {
+      this.refreshConfiguredTile('cr-chantier-suivi');
     }
     this.saveTileSettings();
     this.refreshConfiguredTile(tileId);
@@ -374,6 +399,8 @@ export class Dashboard {
       this.refreshConfiguredTile('top-contributors');
       this.refreshConfiguredTile('top-updated-files');
       this.refreshConfiguredTile('recent-files-table');
+      this.refreshConfiguredTile('cr-chantier-list');
+      this.refreshConfiguredTile('cr-chantier-suivi');
       onFirst();
     });
 
@@ -423,6 +450,8 @@ export class Dashboard {
     this.refreshConfiguredTile('oldest-unresolved-bcf');
     this.refreshConfiguredTile('recent-files-table');
     this.refreshConfiguredTile('recent-bcf-table');
+    this.refreshConfiguredTile('cr-chantier-list');
+    this.refreshConfiguredTile('cr-chantier-suivi');
     this.renderTopicCharts();
     this.renderViewsSection();
     this.renderTeamSection();
@@ -618,6 +647,19 @@ export class Dashboard {
       });
     });
 
+    scope.querySelectorAll('.settings-text-input').forEach(input => {
+      const boundInput = input as HTMLInputElement;
+      if (boundInput.dataset.bound === 'true') return;
+      boundInput.dataset.bound = 'true';
+      boundInput.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const tileId = boundInput.dataset.tileId;
+        const key = boundInput.dataset.settingKey;
+        if (!tileId || !key) return;
+        this.updateTileSetting(tileId, key, boundInput.value.trim());
+      });
+    });
+
     if (!this.globalTileSettingsEventsAttached) {
       document.addEventListener('click', (e) => {
         if (!this.openTileSettingsPanel) return;
@@ -693,6 +735,12 @@ export class Dashboard {
         break;
       case 'recent-bcf-table':
         this.renderRecentBCFTable();
+        break;
+      case 'cr-chantier-list':
+        this.renderCrChantierList();
+        break;
+      case 'cr-chantier-suivi':
+        this.renderCrChantierSuivi();
         break;
       default:
         break;
@@ -1509,6 +1557,92 @@ export class Dashboard {
   }
 
   // =============================================
+  // COMPTE RENDU CHANTIER
+  // =============================================
+
+  private renderCrChantierList(): void {
+    const container = document.getElementById('cr-chantier-list-container');
+    if (!container) return;
+
+    const settings = this.getTileSettings('cr-chantier-list');
+    const top = settings.top || 10;
+    const entries = this.getCrChantierEntries();
+    const visible = top === 'all' ? entries : entries.slice(0, top);
+
+    const header = container.closest('.card')?.querySelector('.card-header h3');
+    if (header) {
+      header.textContent = this.formatResultsTitle('Compte rendu chantier', entries.length);
+    }
+
+    if (!entries.length) {
+      container.innerHTML = `<div class="empty-state">
+        <div class="empty-state-text">Aucun PDF trouvé dans « ${this.esc(this.getCrChantierFolderName())} »</div>
+        <div class="empty-state-hint">Vérifiez le nom du dossier dans les réglages de la tuile.</div>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="table-wrapper"><table class="table cr-chantier-table">
+        <thead><tr><th>N°</th><th>Date CR</th><th>Statut</th><th>Document</th><th>Auteur</th></tr></thead>
+        <tbody>${visible.map((entry, index) => {
+          const tag = this.getCrAgeTag(entry.crDate, index);
+          const numMatch = entry.file.name.match(/N[°º]?\s*0*(\d+)/i);
+          const num = numMatch ? numMatch[1] : '—';
+          return `<tr class="clickable-row" data-file-id="${this.esc(entry.file.id)}" title="Ouvrir le PDF">
+            <td style="font-weight:600;color:var(--trimble-primary);white-space:nowrap">${this.esc(num)}</td>
+            <td style="white-space:nowrap">${this.fmtDate(entry.crDate)}</td>
+            <td><span class="badge ${tag.cls}">${tag.label}</span></td>
+            <td><span class="badge-ext pdf">pdf</span> <span class="file-name">${this.esc(this.truncate(entry.file.name, 42))}</span></td>
+            <td style="color:var(--muted-foreground)">${this.esc(entry.file.uploadedBy)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <div class="click-hint">Cliquez sur une ligne pour ouvrir le PDF</div>`;
+
+    this.attachCrChantierRowClicks(container);
+  }
+
+  private renderCrChantierSuivi(): void {
+    const container = document.getElementById('cr-chantier-suivi-container');
+    if (!container) return;
+
+    const summary = this.getCrSuiviSummary();
+    const frequencyDays = this.getTileSettings('cr-chantier-suivi').frequencyDays || 7;
+
+    if (!summary.lastDate) {
+      container.innerHTML = `<div class="cr-suivi-empty">
+        <div class="cr-suivi-status"><span class="badge ${summary.statusCls}">${summary.statusLabel}</span></div>
+        <p class="cr-suivi-hint">Déposez le premier compte rendu dans le dossier « ${this.esc(this.getCrChantierFolderName())} ».</p>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="cr-suivi-grid">
+        <div class="cr-suivi-item">
+          <span class="cr-suivi-label">Dernier CR</span>
+          <strong class="cr-suivi-value">${this.fmtDate(summary.lastDate)}</strong>
+          <span class="cr-suivi-sub">${this.esc(this.truncate(summary.lastName, 36))}</span>
+        </div>
+        <div class="cr-suivi-item">
+          <span class="cr-suivi-label">Prochain attendu</span>
+          <strong class="cr-suivi-value">${summary.expectedDate ? this.fmtDate(summary.expectedDate) : '—'}</strong>
+          <span class="cr-suivi-sub">Fréquence : ${frequencyDays} jour${frequencyDays > 1 ? 's' : ''}</span>
+        </div>
+        <div class="cr-suivi-item">
+          <span class="cr-suivi-label">Statut</span>
+          <span class="badge ${summary.statusCls}">${summary.statusLabel}</span>
+        </div>
+        <div class="cr-suivi-item">
+          <span class="cr-suivi-label">Total CR</span>
+          <strong class="cr-suivi-value">${summary.total}</strong>
+          <span class="cr-suivi-sub">dans « ${this.esc(this.getCrChantierFolderName())} »</span>
+        </div>
+      </div>`;
+  }
+
+  // =============================================
   // PAGINATION
   // =============================================
 
@@ -1803,6 +1937,128 @@ export class Dashboard {
     return this.allTopics.filter(topic => !startDate || new Date(topic.modifiedAt) >= startDate);
   }
 
+  private parseCrDateFromName(name: string): Date | null {
+    const match = name.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    if (!match) return null;
+    const [, day, month, year] = match;
+    const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private getCrChantierFolderName(): string {
+    return this.getTileSettings('cr-chantier-list').folderName || 'CR Chantier';
+  }
+
+  private isCrChantierFile(file: ProjectFile, folderName?: string): boolean {
+    const folder = (folderName || this.getCrChantierFolderName()).toLowerCase();
+    const path = (file.path || '').toLowerCase().replace(/\\/g, '/');
+    const inFolder = path.includes(folder) || path.endsWith(`/${folder}`);
+    const isPdf = (file.extension || '').toLowerCase() === 'pdf';
+    const nameMatch = /compte\s*rendu.*chantier/i.test(file.name);
+    return isPdf && (inFolder || nameMatch);
+  }
+
+  private getCrChantierEntries(): { file: ProjectFile; crDate: Date }[] {
+    const folderName = this.getCrChantierFolderName();
+    return this.allFiles
+      .filter(f => this.isCrChantierFile(f, folderName))
+      .map(file => ({
+        file,
+        crDate: this.parseCrDateFromName(file.name) || new Date(file.lastModified || file.uploadedAt),
+      }))
+      .sort((a, b) => b.crDate.getTime() - a.crDate.getTime());
+  }
+
+  private getCrAgeTag(crDate: Date, index: number): { label: string; cls: string } {
+    if (index === 0) return { label: 'Dernier', cls: 'badge-new' };
+    const days = Math.floor((Date.now() - crDate.getTime()) / 86400000);
+    if (days <= 28) return { label: 'Récent', cls: 'badge-resolved' };
+    if (days <= 90) return { label: 'Intermédiaire', cls: 'badge-waiting' };
+    return { label: 'Ancien', cls: 'badge-ancien' };
+  }
+
+  private getCrSuiviSummary(): {
+    total: number;
+    lastDate: Date | null;
+    lastName: string;
+    expectedDate: Date | null;
+    delayDays: number;
+    statusLabel: string;
+    statusCls: string;
+  } {
+    const entries = this.getCrChantierEntries();
+    const frequencyDays = this.getTileSettings('cr-chantier-suivi').frequencyDays || 7;
+    const total = entries.length;
+    const lastDate = entries[0]?.crDate || null;
+    const lastName = entries[0]?.file.name || '';
+    const expectedDate = lastDate
+      ? new Date(lastDate.getTime() + frequencyDays * 86400000)
+      : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (!lastDate) {
+      return {
+        total: 0,
+        lastDate: null,
+        lastName: '',
+        expectedDate: null,
+        delayDays: 0,
+        statusLabel: 'Aucun CR',
+        statusCls: 'badge-waiting',
+      };
+    }
+
+    const expected = expectedDate ? new Date(expectedDate) : null;
+    if (expected) expected.setHours(0, 0, 0, 0);
+    const delayDays = expected && today > expected
+      ? Math.floor((today.getTime() - expected.getTime()) / 86400000)
+      : 0;
+
+    if (delayDays > 0) {
+      return {
+        total,
+        lastDate,
+        lastName,
+        expectedDate,
+        delayDays,
+        statusLabel: `En retard de ${delayDays} jour${delayDays > 1 ? 's' : ''}`,
+        statusCls: 'badge-high',
+      };
+    }
+
+    return {
+      total,
+      lastDate,
+      lastName,
+      expectedDate,
+      delayDays: 0,
+      statusLabel: 'À jour',
+      statusCls: 'badge-closed',
+    };
+  }
+
+  private openProjectFile(file: ProjectFile): void {
+    if (file.downloadUrl) {
+      window.open(file.downloadUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    logger.info('No download URL for file', { id: file.id, name: file.name });
+  }
+
+  private attachCrChantierRowClicks(container: HTMLElement): void {
+    container.querySelectorAll('tr[data-file-id]').forEach(row => {
+      const bound = row as HTMLElement;
+      if (bound.dataset.bound === 'true') return;
+      bound.dataset.bound = 'true';
+      row.addEventListener('click', () => {
+        const fileId = bound.dataset.fileId;
+        const file = this.allFiles.find(f => f.id === fileId);
+        if (file) this.openProjectFile(file);
+      });
+    });
+  }
+
   private tileSettingsPanelHtml(tileId: string, title: string, contentHtml: string, summaryText?: string): string {
     const isOpen = this.openTileSettingsPanel === tileId;
     return `<div class="tile-settings-wrapper">
@@ -1877,6 +2133,10 @@ export class Dashboard {
         return this.recentFilesTileHtml();
       case 'recent-bcf-table':
         return this.recentBcfTileHtml();
+      case 'cr-chantier-list':
+        return this.crChantierListTileHtml();
+      case 'cr-chantier-suivi':
+        return this.crChantierSuiviTileHtml();
       default:
         return '';
     }
@@ -2118,6 +2378,56 @@ export class Dashboard {
     </div>`;
   }
 
+  private crChantierListTileHtml(): string {
+    const settings = this.getTileSettings('cr-chantier-list');
+    const count = this.getCrChantierEntries().length;
+    const panel = this.tileSettingsPanelHtml(
+      'cr-chantier-list',
+      'Réglages — Compte rendu chantier',
+      [
+        `<div class="settings-field">
+          <label class="settings-field-label" for="cr-folder-name">Dossier source</label>
+          <input id="cr-folder-name" class="settings-text-input" type="text" data-tile-id="cr-chantier-list" data-setting-key="folderName" value="${this.esc(settings.folderName || 'CR Chantier')}" />
+        </div>`,
+        this.settingsChoiceGroupHtml('cr-chantier-list', 'top', 'Nombre à afficher', [
+          { value: 5, label: '5' },
+          { value: 10, label: '10' },
+          { value: 20, label: '20' },
+          { value: 'all', label: 'Tout' },
+        ], settings.top || 10),
+      ].join(''),
+    );
+
+    return `<div class="card has-floating-panel">
+      <div class="card-header">
+        <h3>${this.formatResultsTitle('Compte rendu chantier', count)}</h3>
+        ${panel}
+      </div>
+      <div class="card-content" style="padding:0"><div id="cr-chantier-list-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div>
+    </div>`;
+  }
+
+  private crChantierSuiviTileHtml(): string {
+    const settings = this.getTileSettings('cr-chantier-suivi');
+    const panel = this.tileSettingsPanelHtml(
+      'cr-chantier-suivi',
+      'Réglages — Suivi CR',
+      this.settingsChoiceGroupHtml('cr-chantier-suivi', 'frequencyDays', 'Fréquence attendue', [
+        { value: 7, label: 'Hebdomadaire (7j)' },
+        { value: 14, label: 'Bi-mensuelle (14j)' },
+        { value: 30, label: 'Mensuelle (30j)' },
+      ], settings.frequencyDays || 7),
+    );
+
+    return `<div class="card has-floating-panel">
+      <div class="card-header">
+        <h3>Suivi CR chantier</h3>
+        ${panel}
+      </div>
+      <div class="card-content"><div id="cr-chantier-suivi-container"><div style="text-align:center;padding:1rem;color:var(--muted-foreground)">Chargement...</div></div></div>
+    </div>`;
+  }
+
   private recentFilesTileHtml(): string {
     const settings = this.getTileSettings('recent-files-table');
     const count = this.getRecentFilesFiltered().length;
@@ -2188,6 +2498,9 @@ export class Dashboard {
       'file-types-metric': this.metricHtml('file-types-val', 'Types de fichiers', 'orange', 'copy-content'),
       'contributors-metric': this.metricHtml('contributors-val', 'Contributeurs', 'blue', 'people-group'),
       'resolution-rate-metric': this.metricHtml('resolution-rate-val', 'Taux résolution', 'teal', 'bar-graph'),
+
+      'cr-chantier-list': this.crChantierListTileHtml(),
+      'cr-chantier-suivi': this.crChantierSuiviTileHtml(),
 
       'cumulative-chart': this.cumulativeTileHtml(),
       'deposit-freq-chart': this.depositFrequencyTileHtml(),

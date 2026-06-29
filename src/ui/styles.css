@@ -1296,6 +1296,91 @@ body {
   padding: 0.5rem 1rem;
 }
 
+.empty-state-hint {
+  font-size: 0.75rem;
+  margin-top: 0.35rem;
+  opacity: 0.85;
+}
+
+.badge-ancien {
+  background: rgba(107, 114, 128, 0.12);
+  color: #9ca3af;
+  border-color: rgba(107, 114, 128, 0.25);
+}
+
+.cr-chantier-table td { vertical-align: middle; }
+
+.cr-suivi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.875rem 1rem;
+}
+
+.cr-suivi-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.cr-suivi-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.cr-suivi-value {
+  font-size: 1.125rem;
+  line-height: 1.2;
+}
+
+.cr-suivi-sub {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cr-suivi-empty {
+  text-align: center;
+  padding: 0.5rem 0;
+}
+
+.cr-suivi-hint {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.settings-field-label {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.settings-text-input {
+  width: 100%;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+
+.settings-text-input:focus {
+  outline: 2px solid rgba(0, 99, 163, 0.35);
+  border-color: var(--trimble-primary);
+}
+
 /* ============================================
    TIMELINE
    ============================================ */
