@@ -47,6 +47,7 @@ export interface ProjectFile {
     lastModified: Date;
     downloadUrl?: string;
     path: string;
+    parentId?: string;
 }
 /**
  * Interface pour une Vue 3D sauvegardée

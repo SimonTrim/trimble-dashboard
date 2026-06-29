@@ -16,6 +16,7 @@ import { viewsService } from '../api/viewsService';
 import { ChartsManager } from './charts';
 import { logger } from '../utils/logger';
 import { errorHandler } from '../utils/errorHandler';
+import { normalizeFilePath } from '../utils/filePath';
 import './styles.css';
 
 // =============================================
@@ -116,6 +117,7 @@ const DEFAULT_TILE_SETTINGS: TileSettingsMap = {
   },
   'cr-chantier-list': {
     folderName: 'CR Chantier',
+    folderId: '',
     top: 10,
   },
   'cr-chantier-suivi': {
@@ -284,7 +286,7 @@ export class Dashboard {
     if (tileId === 'recent-bcf-table' && key === 'window') {
       this.recentBcfPage = 1;
     }
-    if (tileId === 'cr-chantier-list' && (key === 'folderName' || key === 'top')) {
+    if (tileId === 'cr-chantier-list' && (key === 'folderName' || key === 'top' || key === 'folderId')) {
       this.refreshConfiguredTile('cr-chantier-suivi');
     }
     this.saveTileSettings();
@@ -339,7 +341,12 @@ export class Dashboard {
       const cached = JSON.parse(raw);
       if (!cached.timestamp || Date.now() - cached.timestamp > Dashboard.CACHE_TTL_MS) return false;
       this.allTopics = (cached.topics || []).map((t: any) => ({ ...t, createdAt: new Date(t.createdAt), modifiedAt: new Date(t.modifiedAt) }));
-      this.allFiles = (cached.files || []).map((f: any) => ({ ...f, uploadedAt: new Date(f.uploadedAt), lastModified: new Date(f.lastModified) }));
+      this.allFiles = (cached.files || []).map((f: any) => ({
+        ...f,
+        path: normalizeFilePath(f.path),
+        uploadedAt: new Date(f.uploadedAt),
+        lastModified: new Date(f.lastModified),
+      }));
       this.allNotes = (cached.notes || []).map((n: any) => ({ ...n, createdAt: new Date(n.createdAt), updatedAt: new Date(n.updatedAt) }));
       this.allViews = (cached.views || []).map((v: any) => ({ ...v, createdAt: new Date(v.createdAt) }));
       logger.info('✓ Loaded data from session cache');
@@ -391,7 +398,7 @@ export class Dashboard {
     // then replayed it a fraction of a second later when the second promise
     // settled.
     filesPromise.then(files => {
-      this.allFiles = files;
+      this.allFiles = files.map(f => ({ ...f, path: normalizeFilePath(f.path) }));
       this.renderMetrics();
       this.refreshConfiguredTile('cumulative-chart');
       this.refreshConfiguredTile('deposit-freq-chart');
@@ -508,7 +515,7 @@ export class Dashboard {
       }
 
       logger.info('Background refresh: data changed, silent re-render');
-      this.allFiles = files;
+      this.allFiles = files.map(f => ({ ...f, path: normalizeFilePath(f.path) }));
       this.allTopics = topics;
       this.allNotes = notes;
       this.allViews = views;
@@ -1951,11 +1958,13 @@ export class Dashboard {
 
   private isCrChantierFile(file: ProjectFile, folderName?: string): boolean {
     const folder = (folderName || this.getCrChantierFolderName()).toLowerCase();
-    const path = (file.path || '').toLowerCase().replace(/\\/g, '/');
+    const folderId = (this.getTileSettings('cr-chantier-list').folderId || '').trim();
+    const path = normalizeFilePath(file.path).toLowerCase();
     const inFolder = path.includes(folder) || path.endsWith(`/${folder}`);
+    const inFolderById = folderId && file.parentId === folderId;
     const isPdf = (file.extension || '').toLowerCase() === 'pdf';
     const nameMatch = /compte\s*rendu.*chantier/i.test(file.name);
-    return isPdf && (inFolder || nameMatch);
+    return isPdf && (inFolder || inFolderById || nameMatch);
   }
 
   private getCrChantierEntries(): { file: ProjectFile; crDate: Date }[] {
@@ -2388,6 +2397,10 @@ export class Dashboard {
         `<div class="settings-field">
           <label class="settings-field-label" for="cr-folder-name">Dossier source</label>
           <input id="cr-folder-name" class="settings-text-input" type="text" data-tile-id="cr-chantier-list" data-setting-key="folderName" value="${this.esc(settings.folderName || 'CR Chantier')}" />
+        </div>`,
+        `<div class="settings-field">
+          <label class="settings-field-label" for="cr-folder-id">ID dossier Trimble (optionnel)</label>
+          <input id="cr-folder-id" class="settings-text-input" type="text" data-tile-id="cr-chantier-list" data-setting-key="folderId" placeholder="ex. Jx1pfH5t2lg" value="${this.esc(settings.folderId || '')}" />
         </div>`,
         this.settingsChoiceGroupHtml('cr-chantier-list', 'top', 'Nombre à afficher', [
           { value: 5, label: '5' },

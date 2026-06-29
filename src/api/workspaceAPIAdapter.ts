@@ -13,6 +13,7 @@
 
 import { ProjectFile, TrimbleNote, BCFTopic, ProjectView } from '../models/types';
 import { logger } from '../utils/logger';
+import { normalizeFilePath } from '../utils/filePath';
 
 // Interface du TrimbleConnectWorkspace API (méthodes natives UNIQUEMENT)
 interface TrimbleWorkspaceAPI {
@@ -196,7 +197,8 @@ export class WorkspaceAPIAdapter {
               uploadedBy,
               uploadedAt: new Date(activityDate || new Date()),
               lastModified: new Date(activityDate || new Date()),
-              path: file.parentPath || file.path || '/',
+              path: normalizeFilePath(file.parentPath || file.path),
+              parentId: file.parentId || undefined,
               downloadUrl: file.downloadUrl || undefined,
             };
           });

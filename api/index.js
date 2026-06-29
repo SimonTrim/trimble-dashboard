@@ -41,6 +41,10 @@ const TRIMBLE_TOKEN_URL = IS_STAGING
   ? 'https://stage.id.trimble.com/oauth/token'
   : 'https://id.trimble.com/oauth/token';
 
+// The env var is named TRIMBLE_REDIRECT_URL in this project, but earlier code
+// read TRIMBLE_REDIRECT_URI. Accept either so the OAuth flow works regardless.
+const REDIRECT_URI = process.env.TRIMBLE_REDIRECT_URI || process.env.TRIMBLE_REDIRECT_URL;
+
 /**
  * Regional base URLs for Trimble Connect Core API
  * Format: https://{host}/tc/api/2.0/{endpoint}
@@ -98,6 +102,43 @@ const BCF_HOSTS = IS_STAGING ? {
 function getBcfBaseUrl(region) {
   const host = BCF_HOSTS[region] || BCF_HOSTS['eu'];
   return `https://${host}`;
+}
+
+/**
+ * Probe the BCF Topics API across regions with a given token.
+ * Used both by the main endpoint and the OAuth diagnostic flow.
+ * Returns { ok, url?, count?, attempts }.
+ */
+async function probeBcfTopics(projectId, region, accessToken) {
+  const versionPaths = [
+    (base) => `${base}/bcf/3.0/projects/${projectId}/topics`,
+    (base) => `${base}/bcf/2.1/projects/${projectId}/topics`,
+  ];
+  const primaryHost = BCF_HOSTS[region] || BCF_HOSTS['eu'];
+  const otherHosts = Object.entries(BCF_HOSTS)
+    .filter(([r]) => r !== region)
+    .map(([, h]) => h);
+  const hosts = [primaryHost, ...otherHosts];
+
+  const attempts = [];
+  for (const host of hosts) {
+    for (const build of versionPaths) {
+      const url = build(`https://${host}`);
+      let r = await trimbleFetch(url, accessToken);
+      let tries = 0;
+      while (!r.ok && r.status >= 500 && tries < 2) {
+        tries++;
+        await new Promise((resolve) => setTimeout(resolve, 500 * tries));
+        r = await trimbleFetch(url, accessToken);
+      }
+      if (r.ok) {
+        const topics = Array.isArray(r.data) ? r.data : (r.data?.data || []);
+        return { ok: true, url, count: topics.length, tcRequestId: r.tcRequestId || null, attempts };
+      }
+      attempts.push({ url, status: r.status, tcRequestId: r.tcRequestId || null, body: (r.error || '').substring(0, 300) });
+    }
+  }
+  return { ok: false, attempts };
 }
 
 // Token store
@@ -165,11 +206,37 @@ app.get('/auth/login', (req, res) => {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.TRIMBLE_CLIENT_ID,
-    redirect_uri: process.env.TRIMBLE_REDIRECT_URI,
+    redirect_uri: REDIRECT_URI,
     scope: 'openid SMA-tc-dashboard',
     state: `${state}:${sessionId}`
   });
 
+  res.redirect(`${TRIMBLE_AUTH_URL}?${params.toString()}`);
+});
+
+/**
+ * DIAGNOSTIC: Log in with the SMA-tc-dashboard app itself (which is subscribed
+ * to the Topics API) and test BCF topics with THAT token. Open in a browser:
+ *   https://trimble-dashboard.vercel.app/api/debug/bcf-login?projectId=Cw3RYI17np8
+ * It redirects through Trimble login, then renders the raw Topics API result.
+ */
+app.get('/api/debug/bcf-login', (req, res) => {
+  const projectId = req.query.projectId;
+  if (!projectId) {
+    return res.status(400).send('Missing ?projectId= query parameter');
+  }
+  // Optional ?scope= override to experiment with different OAuth scopes
+  // (e.g. "openid tc"). Defaults to the app scope.
+  const scope = req.query.scope || 'openid SMA-tc-dashboard';
+  const state = generateRandomState();
+  const sessionId = `bcftest_${projectId}`;
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: process.env.TRIMBLE_CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    scope,
+    state: `${state}:${sessionId}`,
+  });
   res.redirect(`${TRIMBLE_AUTH_URL}?${params.toString()}`);
 });
 
@@ -181,15 +248,40 @@ app.get('/callback', async (req, res) => {
   }
 
   const [stateValue, sessionId] = state.split(':');
-  const storedState = tokenStore.get(`state_${sessionId}`);
-  
-  if (!storedState || storedState !== stateValue) {
-    return res.status(403).send('Invalid state - Possible CSRF attack');
+  const isBcfTest = sessionId && sessionId.startsWith('bcftest_');
+
+  // The CSRF state check relies on the in-memory store surviving between the
+  // login and callback requests. That is unreliable on stateless serverless
+  // functions, so skip it for the one-off diagnostic flow (no CSRF concern).
+  if (!isBcfTest) {
+    const storedState = tokenStore.get(`state_${sessionId}`);
+    if (!storedState || storedState !== stateValue) {
+      return res.status(403).send('Invalid state - Possible CSRF attack');
+    }
   }
 
   try {
     const tokens = await exchangeCodeForToken(code);
-    
+
+    // Diagnostic branch: test the Topics API with the app's own token.
+    if (isBcfTest) {
+      const projectId = sessionId.substring('bcftest_'.length);
+      const token = tokens.access_token;
+      const region = getRegionCode(tokens.data_region || 'europe');
+      const claims = decodeJwtPayload(token) || {};
+      const result = await probeBcfTopics(projectId, region, token);
+      return res.json({
+        test: 'bcf-with-app-token (SMA-tc-dashboard)',
+        success: result.ok,
+        projectId,
+        resolvedRegion: region,
+        dataRegion: tokens.data_region || null,
+        tokenScopes: claims.scope || claims.scp || claims.scopes || null,
+        tokenAudience: claims.aud || null,
+        result,
+      });
+    }
+
     tokenStore.set(`tokens_${sessionId}`, {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
@@ -221,7 +313,7 @@ async function exchangeCodeForToken(code) {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code: code,
-    redirect_uri: process.env.TRIMBLE_REDIRECT_URI,
+    redirect_uri: REDIRECT_URI,
     client_id: process.env.TRIMBLE_CLIENT_ID,
     client_secret: process.env.TRIMBLE_CLIENT_SECRET
   });
@@ -321,28 +413,66 @@ async function requireAuth(req, res, next) {
 }
 
 /**
+ * Decode (without verifying) the payload of a JWT access token.
+ * Used only for diagnostics — to surface the granted `scope` / `aud` claims
+ * so we can tell whether a 403 is caused by a missing API scope.
+ * @returns {object|null} decoded claims or null if not decodable
+ */
+function decodeJwtPayload(token) {
+  try {
+    if (!token || typeof token !== 'string') return null;
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = Buffer.from(payload, 'base64').toString('utf8');
+    return JSON.parse(json);
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
  * Helper: Make an authenticated request to Trimble Connect API
  */
 async function trimbleFetch(url, accessToken, options = {}) {
   console.log(`📡 Trimble API: GET ${url}`);
   
+  const baseHeaders = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Accept': 'application/json',
+  };
+  // Only send Content-Type when there is actually a request body. Sending it on
+  // a bodyless GET can make some gateways return 500.
+  if (options.body) {
+    baseHeaders['Content-Type'] = 'application/json';
+  }
+
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
+      ...baseHeaders,
       ...(options.headers || {}),
     }
   });
 
+  // Trimble puts a correlation id in the response headers. Capture it so we can
+  // give it to Trimble support to trace server-side errors (e.g. 500s).
+  const tcRequestId =
+    response.headers.get('tc-request-id') ||
+    response.headers.get('x-tc-request-id') ||
+    response.headers.get('tc-correlation-id') ||
+    response.headers.get('x-request-id') ||
+    response.headers.get('request-id') ||
+    null;
+
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`❌ Trimble API Error ${response.status}: ${errorText.substring(0, 200)}`);
-    return { ok: false, status: response.status, error: errorText };
+    console.error(`❌ Trimble API Error ${response.status} (tc-request-id: ${tcRequestId}): ${errorText.substring(0, 200)}`);
+    return { ok: false, status: response.status, error: errorText, tcRequestId };
   }
 
   const data = await response.json();
-  return { ok: true, data };
+  return { ok: true, data, tcRequestId };
 }
 
 // ========================================
@@ -449,16 +579,38 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
       return field;
     }
 
+    function normalizeFilePath(value) {
+      if (!value) return '/';
+      if (typeof value === 'string') return value.replace(/\\/g, '/');
+      if (Array.isArray(value)) {
+        const segments = value
+          .map((seg) => {
+            if (typeof seg === 'string') return seg;
+            if (seg && typeof seg === 'object') return seg.name || seg.label || seg.nm || '';
+            return '';
+          })
+          .filter(Boolean);
+        return segments.length ? `/${segments.join('/')}` : '/';
+      }
+      if (typeof value === 'object') {
+        if (typeof value.path === 'string') return normalizeFilePath(value.path);
+        if (typeof value.fullPath === 'string') return normalizeFilePath(value.fullPath);
+        if (typeof value.name === 'string' && !value.path) return `/${value.name}`;
+        if (Array.isArray(value.segments)) return normalizeFilePath(value.segments);
+      }
+      return '/';
+    }
+
     // Normalize file objects from any API source into a consistent shape
-    function normalizeFile(f) {
+    function normalizeFile(f, folderPath, parentId) {
       const name = f.name || f.nm || f.label || 'Unknown';
       return {
         id: f.id,
         name,
         size: f.size || f.sz || 0,
         type: f.type || 'FILE',
-        parentId: f.parentId,
-        path: f.parentPath || f.path || '/',
+        parentId: parentId || f.parentId || null,
+        path: folderPath || normalizeFilePath(f.parentPath || f.path),
         // Dates — use both long and short field names
         createdOn: f.createdOn || f.ct || null,
         modifiedOn: f.modifiedOn || f.mt || f.createdOn || f.ct || null,
@@ -512,19 +664,26 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
         const rootId = projectResult.data.rootId;
         console.log(`📁 Strategy 2: Folder API (root: ${rootId})...`);
 
-        async function listAllFiles(folderId, depth) {
+        async function listAllFiles(folderId, depth, folderPath = '/') {
           if (depth > 8) return [];
           const url = `${baseUrl}/folders/${folderId}/items`;
           const r = await trimbleFetch(url, req.accessToken);
           if (!r.ok) return [];
           const items = Array.isArray(r.data) ? r.data : (r.data?.data || []);
-          let files = items.filter(i => i.type === 'FILE').map(normalizeFile);
+          let files = items
+            .filter(i => i.type === 'FILE')
+            .map(i => normalizeFile(i, folderPath, folderId));
           const folders = items.filter(i => i.type === 'FOLDER');
-          // Traverse subfolders in parallel (batches of 5)
           for (let i = 0; i < folders.length; i += 5) {
             const batch = folders.slice(i, i + 5);
-            const results = await Promise.all(batch.map(f => listAllFiles(f.id, depth + 1)));
-            for (const r of results) files = files.concat(r);
+            const results = await Promise.all(batch.map(f => {
+              const childName = f.name || f.nm || f.label || '';
+              const childPath = folderPath === '/'
+                ? `/${childName}`
+                : `${folderPath}/${childName}`;
+              return listAllFiles(f.id, depth + 1, childPath);
+            }));
+            for (const sub of results) files = files.concat(sub);
           }
           return files;
         }
@@ -551,6 +710,12 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
         }
         if (f.createdBy && f.createdBy !== 'Unknown' && existing.createdBy === 'Unknown') {
           existing.createdBy = f.createdBy;
+        }
+        if (f.path && f.path !== '/' && (!existing.path || existing.path === '/')) {
+          existing.path = f.path;
+        }
+        if (f.parentId && !existing.parentId) {
+          existing.parentId = f.parentId;
         }
       }
     }
@@ -586,53 +751,126 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
 app.get('/api/projects/:projectId/bcf/topics', requireAuth, async (req, res) => {
   try {
     const { projectId } = req.params;
-    
-    // Get the correct BCF host for this region (openXX, not appXX)
-    const bcfBase = getBcfBaseUrl(req.region);
-    console.log(`🔧 BCF: Region "${req.region}" → BCF base: ${bcfBase}`);
-    
-    // Strategy 1: Try BCF 3.0 (latest, from Swagger docs)
-    const bcfUrl1 = `${bcfBase}/bcf/3.0/projects/${projectId}/topics`;
-    console.log(`🔧 BCF: Trying BCF 3.0: ${bcfUrl1}`);
-    let result = await trimbleFetch(bcfUrl1, req.accessToken);
-    
-    if (result.ok) {
-      const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      console.log(`✅ Retrieved ${topics.length} BCF topics via BCF 3.0`);
-      return res.json(topics);
+
+    // Version paths to try, in order of preference (newest first)
+    const versionPaths = [
+      (base) => `${base}/bcf/3.0/projects/${projectId}/topics`,
+      (base) => `${base}/bcf/2.1/projects/${projectId}/topics`,
+      (base) => `${base}/projects/${projectId}/topics`,
+    ];
+
+    // Host candidates: the project's resolved region first, then every other
+    // region as a fallback. This rules out a region mismatch automatically —
+    // a wrong region returns 404, so if every host returns 403 the cause is
+    // an authorization/scope problem, not the URL.
+    const primaryHost = BCF_HOSTS[req.region] || BCF_HOSTS['eu'];
+    const otherHosts = Object.entries(BCF_HOSTS)
+      .filter(([region]) => region !== req.region)
+      .map(([, host]) => host);
+    const hostCandidates = [primaryHost, ...otherHosts];
+
+    console.log(`🔧 BCF: Region "${req.region}" → primary host: ${primaryHost}`);
+
+    const attempts = [];
+    let lastStatus = null;
+    let lastError = null;
+    // The most meaningful attempt is the versioned endpoint on the project's
+    // home region (the first one we try). A 500/200 there is far more telling
+    // than the 403/404 we get from the wrong regions or the invalid no-version
+    // path, so we report that as the primary error.
+    let primaryStatus = null;
+    let primaryError = null;
+
+    // Trimble classifies 5xx as retryable server-side errors. Retry the same
+    // URL a couple of times with backoff before giving up on it.
+    const fetchWithRetry = async (url) => {
+      let r = await trimbleFetch(url, req.accessToken);
+      let tries = 0;
+      while (!r.ok && r.status >= 500 && tries < 2) {
+        tries++;
+        await new Promise((resolve) => setTimeout(resolve, 500 * tries));
+        console.log(`🔁 BCF 5xx retry #${tries} for ${url}`);
+        r = await trimbleFetch(url, req.accessToken);
+      }
+      return r;
+    };
+
+    for (const host of hostCandidates) {
+      const base = `https://${host}`;
+      for (const buildUrl of versionPaths) {
+        const url = buildUrl(base);
+        const result = await fetchWithRetry(url);
+
+        if (result.ok) {
+          const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+          console.log(`✅ Retrieved ${topics.length} BCF topics via ${url} (tc-request-id: ${result.tcRequestId})`);
+          // Expose the Trimble correlation id of the successful call so it can
+          // be read from the browser DevTools (Network tab) and shared with support.
+          if (result.tcRequestId) {
+            res.set('X-TC-Request-Id', result.tcRequestId);
+            res.set('Access-Control-Expose-Headers', 'X-TC-Request-Id');
+          }
+          return res.json(topics);
+        }
+
+        if (primaryStatus === null) {
+          primaryStatus = result.status;
+          primaryError = result.error;
+        }
+        lastStatus = result.status;
+        lastError = result.error;
+        attempts.push({
+          url,
+          status: result.status,
+          tcRequestId: result.tcRequestId || null,
+          body: (result.error || '').substring(0, 300),
+        });
+        console.log(`⚠️ BCF failed (${result.status}) at ${url}: ${(result.error || '').substring(0, 200)}`);
+
+        // 404 means "wrong host/version" → keep trying other versions/hosts.
+        // 403 on the primary host means the token is rejected by the BCF
+        // service; trying other hosts confirms it's not a region issue.
+      }
     }
-    console.log(`⚠️ BCF 3.0 failed (${result.status}): ${(result.error || '').substring(0, 100)}`);
-    
-    // Strategy 2: Try BCF 2.1 (older but still commonly used)
-    const bcfUrl2 = `${bcfBase}/bcf/2.1/projects/${projectId}/topics`;
-    console.log(`🔧 BCF: Trying BCF 2.1: ${bcfUrl2}`);
-    result = await trimbleFetch(bcfUrl2, req.accessToken);
-    
-    if (result.ok) {
-      const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      console.log(`✅ Retrieved ${topics.length} BCF topics via BCF 2.1`);
-      return res.json(topics);
+
+    // Everything failed — decode the token to expose the granted scopes so we
+    // can tell whether the 403 is a missing-scope problem.
+    const claims = decodeJwtPayload(req.accessToken) || {};
+    const tokenScopes = claims.scope || claims.scp || claims.scopes || null;
+    const tokenAud = claims.aud || null;
+
+    const reportStatus = primaryStatus || lastStatus || 500;
+    const reportError = primaryError || lastError || 'Failed to fetch BCF topics';
+
+    console.error(`❌ All BCF topic attempts failed for project ${projectId}`);
+    console.error(`   Resolved region: ${req.region}`);
+    console.error(`   Primary (home-region) status: ${primaryStatus}`);
+    console.error(`   Token scopes: ${JSON.stringify(tokenScopes)}`);
+    console.error(`   Token audience: ${JSON.stringify(tokenAud)}`);
+    console.error(`   Attempts: ${JSON.stringify(attempts)}`);
+
+    let hint;
+    if (reportStatus >= 500) {
+      hint = 'The Topics service returned a 5xx error on the project\'s home region. The request passed authentication but the BCF service failed — check the captured response body below for the real reason (often a missing/invalid scope on the token or a project not provisioned for Topics).';
+    } else if (reportStatus === 403) {
+      hint = 'The Topics service rejected the token (403). The token is accepted by the Core API but not by the Topics/BCF service — likely a missing Topics scope on the token actually presented.';
+    } else {
+      hint = 'BCF topics could not be retrieved. Inspect the per-attempt response bodies below.';
     }
-    console.log(`⚠️ BCF 2.1 failed (${result.status}): ${(result.error || '').substring(0, 100)}`);
-    
-    // Strategy 3: Try without version prefix (fallback)
-    const bcfUrl3 = `${bcfBase}/projects/${projectId}/topics`;
-    console.log(`🔧 BCF: Trying without version: ${bcfUrl3}`);
-    result = await trimbleFetch(bcfUrl3, req.accessToken);
-    
-    if (result.ok) {
-      const topics = Array.isArray(result.data) ? result.data : (result.data?.data || []);
-      console.log(`✅ Retrieved ${topics.length} BCF topics via direct path`);
-      return res.json(topics);
-    }
-    console.log(`⚠️ BCF direct path failed (${result.status}): ${(result.error || '').substring(0, 100)}`);
-    
-    // All strategies failed - log debug info
-    console.error(`❌ All BCF topic strategies failed for project ${projectId} in region ${req.region}`);
-    console.error(`   BCF base URL was: ${bcfBase}`);
-    console.error(`   Last error: ${result.error}`);
-    return res.status(result.status || 500).json({ error: result.error || 'Failed to fetch BCF topics' });
-    
+
+    return res.status(reportStatus).json({
+      error: reportError,
+      diagnostics: {
+        region: req.region,
+        primaryHost,
+        primaryStatus,
+        attempts,
+        tokenScopes,
+        tokenAudience: tokenAud,
+        hint,
+      },
+    });
+
   } catch (error) {
     console.error('❌ BCF Topics API error:', error.message);
     res.status(500).json({ error: error.message });
@@ -810,7 +1048,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    version: '5.3.0',
+    version: '5.10.0',
     environment: ENVIRONMENT,
     activeSessions: tokenStore.size
   });
@@ -819,10 +1057,10 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     name: 'Trimble Dashboard Backend',
-    version: '5.3.0',
+    version: '5.10.0',
     environment: ENVIRONMENT,
     deployed: new Date().toISOString(),
-    note: 'Fixed BCF topics: uses openXX.connect.trimble.com servers (from Swagger docs)',
+    note: 'BCF topics: multi-region fallback + scope diagnostics on 403',
     supportedRegions: Object.keys(REGIONAL_HOSTS),
     endpoints: {
       auth: {

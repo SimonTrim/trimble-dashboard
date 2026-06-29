@@ -55,6 +55,7 @@ export interface ProjectFile {
   lastModified: Date;
   downloadUrl?: string;
   path: string;
+  parentId?: string;
 }
 
 /**
