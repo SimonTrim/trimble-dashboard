@@ -138,6 +138,7 @@ export class Dashboard {
   private projectName: string = '';
   private openTileSettingsPanel: string | null = null;
   private globalTileSettingsEventsAttached = false;
+  private settingsPanelLayoutListenersAttached = false;
 
   private allTopics: BCFTopic[] = [];
   private allFiles: ProjectFile[] = [];
@@ -671,10 +672,74 @@ export class Dashboard {
       document.addEventListener('click', (e) => {
         if (!this.openTileSettingsPanel) return;
         const target = e.target as HTMLElement;
-        if (target.closest('.tile-settings-wrapper')) return;
+        if (target.closest('.tile-settings-panel')) return;
+        if (target.closest('.tile-settings-toggle')) return;
         this.closeOpenTileSettingsPanel();
       });
       this.globalTileSettingsEventsAttached = true;
+    }
+
+    this.ensureSettingsPanelLayoutListeners();
+  }
+
+  private ensureSettingsPanelLayoutListeners(): void {
+    if (this.settingsPanelLayoutListenersAttached) return;
+    this.settingsPanelLayoutListenersAttached = true;
+    const reposition = () => {
+      if (this.openTileSettingsPanel) {
+        this.positionOpenTileSettingsPanel(this.openTileSettingsPanel);
+      }
+    };
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+  }
+
+  /**
+   * Render settings panels in fixed viewport coordinates so they are never
+   * clipped by tile overflow, grid row height, or dashboard scroll containers.
+   */
+  private positionOpenTileSettingsPanel(tileId: string): void {
+    const tile = document.querySelector(`.tile[data-tile-id="${tileId}"]`) as HTMLElement | null;
+    if (!tile) return;
+
+    const panel = tile.querySelector('.tile-settings-panel.open') as HTMLElement | null;
+    const card = tile.querySelector('.card') as HTMLElement | null;
+    if (!panel || !card) return;
+
+    const cardRect = card.getBoundingClientRect();
+    const header = card.querySelector('.card-header') as HTMLElement | null;
+    const anchorRect = header?.getBoundingClientRect() || cardRect;
+    const padding = 12;
+    const gap = 8;
+    const viewportPadding = 16;
+
+    panel.classList.add('is-fixed');
+    panel.style.display = 'block';
+    panel.style.visibility = 'hidden';
+    panel.style.left = `${cardRect.left + padding}px`;
+    panel.style.width = `${Math.max(220, cardRect.width - padding * 2)}px`;
+    panel.style.right = 'auto';
+
+    let top = anchorRect.bottom + gap;
+    let maxHeight = Math.min(420, window.innerHeight - top - viewportPadding);
+    panel.style.top = `${top}px`;
+    panel.style.bottom = 'auto';
+    panel.style.maxHeight = `${maxHeight}px`;
+
+    panel.style.visibility = 'visible';
+    const panelHeight = panel.getBoundingClientRect().height;
+
+    if (top + panelHeight > window.innerHeight - viewportPadding) {
+      const topAbove = anchorRect.top - panelHeight - gap;
+      if (topAbove >= viewportPadding) {
+        top = topAbove;
+        maxHeight = Math.min(420, anchorRect.top - gap - viewportPadding);
+      } else {
+        top = viewportPadding;
+        maxHeight = window.innerHeight - viewportPadding * 2;
+      }
+      panel.style.top = `${top}px`;
+      panel.style.maxHeight = `${maxHeight}px`;
     }
   }
 
@@ -709,6 +774,9 @@ export class Dashboard {
     this.bindDragHandleForTile(tile);
     this.attachTileSettingsEvents(tile);
     this.renderTargetTileById(tileId);
+    if (this.openTileSettingsPanel === tileId) {
+      requestAnimationFrame(() => this.positionOpenTileSettingsPanel(tileId));
+    }
   }
 
   private renderTargetTileById(tileId: string): void {
