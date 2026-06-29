@@ -146,6 +146,8 @@ export class Dashboard {
   private allNotes: TrimbleNote[] = [];
   private allViews: ProjectView[] = [];
 
+  private fileOpenHandler: ((file: ProjectFile) => void | Promise<void>) | null = null;
+
   private recentFilesPage: number = 1;
   private recentBcfPage: number = 1;
   private readonly PAGE_SIZE = 10;
@@ -161,6 +163,10 @@ export class Dashboard {
 
   setProjectName(name: string): void {
     this.projectName = name;
+  }
+
+  setFileOpenHandler(handler: (file: ProjectFile) => void | Promise<void>): void {
+    this.fileOpenHandler = handler;
   }
 
   // =============================================
@@ -1607,7 +1613,7 @@ export class Dashboard {
         <tbody>${pageFiles.map(f => {
           const ext = (f.extension || '').toLowerCase();
           const age = this.relDate(new Date(f.uploadedAt));
-          return `<tr class="clickable-row">
+          return `<tr class="clickable-row" data-file-id="${this.esc(f.id)}" title="Ouvrir dans la visionneuse 2D">
             <td><span class="badge-ext ${ext || 'default'}">${ext || '?'}</span> <span class="file-name" title="${this.esc(f.name)}">${this.esc(this.truncate(f.name, 70))}</span></td>
             <td><span class="badge badge-file">Nouveau</span></td>
             <td style="color:var(--muted-foreground);white-space:nowrap">${age}</td>
@@ -1615,9 +1621,10 @@ export class Dashboard {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <div class="click-hint">Cliquez sur un fichier pour l'ouvrir dans Trimble Connect</div>`;
+      <div class="click-hint">Cliquez sur un fichier pour l'ouvrir dans la visionneuse 2D Trimble Connect</div>`;
 
     this.attachPagination('recent-files', totalPages, (p) => { this.recentFilesPage = p; this.renderRecentFilesTable(); });
+    this.attachFileRowClicks(container);
   }
 
   // =============================================
@@ -1694,7 +1701,7 @@ export class Dashboard {
           const tag = this.getCrAgeTag(entry.crDate, index);
           const numMatch = entry.file.name.match(/N[°º]?\s*0*(\d+)/i);
           const num = numMatch ? numMatch[1] : '—';
-          return `<tr class="clickable-row" data-file-id="${this.esc(entry.file.id)}" title="Ouvrir le PDF">
+          return `<tr class="clickable-row" data-file-id="${this.esc(entry.file.id)}" title="Ouvrir dans la visionneuse 2D Trimble Connect">
             <td style="font-weight:600;color:var(--trimble-primary);white-space:nowrap">${this.esc(num)}</td>
             <td style="white-space:nowrap">${this.fmtDate(entry.crDate)}</td>
             <td><span class="badge ${tag.cls}">${tag.label}</span></td>
@@ -1703,7 +1710,7 @@ export class Dashboard {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-      <div class="click-hint">Cliquez sur une ligne pour ouvrir le PDF</div>`;
+      <div class="click-hint">Cliquez sur une ligne pour ouvrir le CR dans la visionneuse 2D Trimble Connect</div>`;
 
     this.attachCrChantierRowClicks(container);
   }
@@ -2077,11 +2084,11 @@ export class Dashboard {
   }
 
   private getCrAgeTag(crDate: Date, index: number): { label: string; cls: string } {
-    if (index === 0) return { label: 'Dernier', cls: 'badge-new' };
+    if (index === 0) return { label: 'Dernier', cls: 'badge-cr-dernier' };
     const days = Math.floor((Date.now() - crDate.getTime()) / 86400000);
-    if (days <= 28) return { label: 'Récent', cls: 'badge-resolved' };
-    if (days <= 90) return { label: 'Intermédiaire', cls: 'badge-waiting' };
-    return { label: 'Ancien', cls: 'badge-ancien' };
+    if (days <= 28) return { label: 'Récent', cls: 'badge-cr-recent' };
+    if (days <= 90) return { label: 'Intermédiaire', cls: 'badge-cr-intermediaire' };
+    return { label: 'Ancien', cls: 'badge-cr-ancien' };
   }
 
   private getCrSuiviSummary(): {
@@ -2145,15 +2152,24 @@ export class Dashboard {
     };
   }
 
-  private openProjectFile(file: ProjectFile): void {
+  private async openProjectFile(file: ProjectFile): Promise<void> {
+    if (this.fileOpenHandler) {
+      try {
+        await this.fileOpenHandler(file);
+      } catch (error) {
+        logger.error('Failed to open file in viewer', { error, fileId: file.id, name: file.name });
+      }
+      return;
+    }
+
     if (file.downloadUrl) {
       window.open(file.downloadUrl, '_blank', 'noopener,noreferrer');
       return;
     }
-    logger.info('No download URL for file', { id: file.id, name: file.name });
+    logger.info('No file open handler or download URL for file', { id: file.id, name: file.name });
   }
 
-  private attachCrChantierRowClicks(container: HTMLElement): void {
+  private attachFileRowClicks(container: HTMLElement): void {
     container.querySelectorAll('tr[data-file-id]').forEach(row => {
       const bound = row as HTMLElement;
       if (bound.dataset.bound === 'true') return;
@@ -2161,9 +2177,13 @@ export class Dashboard {
       row.addEventListener('click', () => {
         const fileId = bound.dataset.fileId;
         const file = this.allFiles.find(f => f.id === fileId);
-        if (file) this.openProjectFile(file);
+        if (file) void this.openProjectFile(file);
       });
     });
+  }
+
+  private attachCrChantierRowClicks(container: HTMLElement): void {
+    this.attachFileRowClicks(container);
   }
 
   private tileSettingsPanelHtml(tileId: string, title: string, contentHtml: string, summaryText?: string): string {

@@ -74,6 +74,27 @@ function getBaseUrl(region) {
   return `https://${host}/tc/api/2.0`;
 }
 
+function mapWebRegion(regionCode) {
+  const map = {
+    us: 'northamerica',
+    eu: 'europe',
+    ap: 'asia',
+    'ap-au': 'australia',
+  };
+  return map[regionCode] || 'europe';
+}
+
+function build2DViewerUrl(projectId, versionId, webRegion) {
+  const params = new URLSearchParams({
+    id: versionId,
+    version: versionId,
+    type: 'revisions',
+    etag: versionId,
+  });
+  if (webRegion) params.set('region', webRegion);
+  return `https://web.connect.trimble.com/projects/${encodeURIComponent(projectId)}/viewer/2D?${params.toString()}`;
+}
+
 /**
  * BCF Topics API hosts (from Swagger: Trimble-Connect/topic/v2)
  * These are DIFFERENT from the Core API hosts (appXX → openXX)
@@ -731,6 +752,46 @@ app.get('/api/projects/:projectId/files', requireAuth, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Files API error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/files/:fileId/viewer-2d
+ * Resolve the latest file version and return the Trimble Connect 2D viewer URL.
+ */
+app.get('/api/projects/:projectId/files/:fileId/viewer-2d', requireAuth, async (req, res) => {
+  try {
+    const { projectId, fileId } = req.params;
+    const baseUrl = getBaseUrl(req.region);
+    let versionId = fileId;
+
+    const fileResult = await trimbleFetch(`${baseUrl}/files/${fileId}`, req.accessToken);
+    if (fileResult.ok && fileResult.data) {
+      versionId = fileResult.data.versionId || fileResult.data.id || versionId;
+    }
+
+    const versionsResult = await trimbleFetch(`${baseUrl}/files/${fileId}/versions`, req.accessToken);
+    if (versionsResult.ok) {
+      const versions = Array.isArray(versionsResult.data)
+        ? versionsResult.data
+        : (versionsResult.data?.data || versionsResult.data?.items || []);
+      if (versions.length) {
+        const sorted = [...versions].sort((a, b) => {
+          const da = new Date(a.modifiedOn || a.createdOn || a.mt || a.ct || 0).getTime();
+          const db = new Date(b.modifiedOn || b.createdOn || b.mt || b.ct || 0).getTime();
+          return db - da;
+        });
+        versionId = sorted[0].id || sorted[0].versionId || versionId;
+      }
+    }
+
+    const webRegion = mapWebRegion(req.region);
+    const viewerUrl = build2DViewerUrl(projectId, versionId, webRegion);
+    console.log(`🖼️ 2D viewer URL for file ${fileId}: ${viewerUrl}`);
+    res.json({ viewerUrl, versionId, fileId, projectId });
+  } catch (error) {
+    console.error('❌ viewer-2d error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

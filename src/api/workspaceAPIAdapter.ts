@@ -14,6 +14,10 @@
 import { ProjectFile, TrimbleNote, BCFTopic, ProjectView } from '../models/types';
 import { logger } from '../utils/logger';
 import { normalizeFilePath } from '../utils/filePath';
+import {
+  build2DViewerUrl,
+  mapProjectLocationToWebRegion,
+} from '../utils/trimbleViewer';
 
 // Interface du TrimbleConnectWorkspace API (méthodes natives UNIQUEMENT)
 interface TrimbleWorkspaceAPI {
@@ -242,6 +246,28 @@ export class WorkspaceAPIAdapter {
           return [];
         }
       }
+    };
+  }
+
+  /**
+   * Navigation — open files in Trimble Connect web viewers
+   */
+  get navigation() {
+    const get2DViewerUrl = async (fileId: string): Promise<string> => {
+      try {
+        const data = await this.fetchAPI<{ viewerUrl: string }>(
+          `/projects/${this.projectId}/files/${fileId}/viewer-2d`,
+        );
+        return data.viewerUrl;
+      } catch (error) {
+        logger.warn('viewer-2d API failed, using direct URL fallback', { fileId, error });
+        const webRegion = mapProjectLocationToWebRegion(this.projectLocation);
+        return build2DViewerUrl(this.projectId, fileId, webRegion);
+      }
+    };
+
+    return {
+      get2DViewerUrl,
     };
   }
 

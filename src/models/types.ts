@@ -56,6 +56,7 @@ export interface ProjectFile {
   downloadUrl?: string;
   path: string;
   parentId?: string;
+  versionId?: string;
 }
 
 /**

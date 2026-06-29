@@ -73,6 +73,12 @@ export declare class WorkspaceAPIAdapter {
         }) => Promise<ProjectFile[]>;
     };
     /**
+     * Navigation — open files in Trimble Connect web viewers
+     */
+    get navigation(): {
+        get2DViewerUrl: (fileId: string) => Promise<string>;
+    };
+    /**
      * API des notes (Todos) - Utilise REST API Core
      * Endpoint: GET /projects/{projectId}/todos
      */

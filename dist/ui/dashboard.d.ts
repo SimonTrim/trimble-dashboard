@@ -3,6 +3,7 @@
  * 4-column grid, draggable tiles, 8 KPI metrics, 6 charts,
  * tables with pagination, contributor bars, BCF age tracking
  */
+import { ProjectFile } from '../models/types';
 import './styles.css';
 export declare class Dashboard {
     private chartsManager;
@@ -19,11 +20,13 @@ export declare class Dashboard {
     private allFiles;
     private allNotes;
     private allViews;
+    private fileOpenHandler;
     private recentFilesPage;
     private recentBcfPage;
     private readonly PAGE_SIZE;
     constructor(containerId?: string, _config?: Record<string, any>);
     setProjectName(name: string): void;
+    setFileOpenHandler(handler: (file: ProjectFile) => void | Promise<void>): void;
     private loadTheme;
     private toggleTheme;
     private isDark;
@@ -159,6 +162,7 @@ export declare class Dashboard {
     private getCrAgeTag;
     private getCrSuiviSummary;
     private openProjectFile;
+    private attachFileRowClicks;
     private attachCrChantierRowClicks;
     private tileSettingsPanelHtml;
     private settingsChoiceGroupHtml;

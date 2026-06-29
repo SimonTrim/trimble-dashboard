@@ -10,6 +10,8 @@ import { errorHandler, ErrorCode } from './utils/errorHandler';
 import { trimbleClient } from './api/trimbleClient';
 import { createWorkspaceAPIAdapter } from './api/workspaceAPIAdapter';
 import { authService } from './api/authService';
+import { openProjectFileInViewer, setViewerContext } from './api/fileNavigationService';
+import { mapProjectLocationToWebRegion } from './utils/trimbleViewer';
 
 // Type pour l'API Workspace
 interface WorkspaceAPIInstance {
@@ -109,6 +111,7 @@ async function initializeStandalone(): Promise<void> {
     maxRecentFilesDisplay: 10,
     enableAutoRefresh: false,
   });
+  dashboard.setFileOpenHandler(openProjectFileInViewer);
 
   // Afficher le dashboard
   await dashboard.render();
@@ -466,7 +469,11 @@ async function initializeWithToken(accessToken: string, projectInfo: any): Promi
   });
   
   // Initialiser le client Trimble avec l'adaptateur
-  trimbleClient.initializeWithApi(apiAdapter);
+  trimbleClient.initializeWithApi(apiAdapter, projectInfo.id);
+  setViewerContext({
+    projectId: projectInfo.id,
+    webRegion: mapProjectLocationToWebRegion(projectInfo.location),
+  });
   
   // Créer le menu dans le panneau latéral
   createSidebarMenu();
@@ -483,6 +490,8 @@ async function initializeWithToken(accessToken: string, projectInfo: any): Promi
   if (projectInfo && projectInfo.name) {
     dashboard.setProjectName(`${projectInfo.id || ''} - ${projectInfo.name}`);
   }
+
+  dashboard.setFileOpenHandler(openProjectFileInViewer);
 
   await dashboard.render();
   // Trimble Connect can emit `extension.command/show_dashboard` immediately
