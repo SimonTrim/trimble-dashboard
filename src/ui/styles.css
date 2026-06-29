@@ -727,6 +727,10 @@ body {
   box-shadow: var(--shadow-lg), 0 16px 40px rgba(0, 0, 0, 0.25);
 }
 
+.tile-settings-panel.is-portaled {
+  pointer-events: auto;
+}
+
 .tile-settings-header {
   display: flex;
   align-items: center;

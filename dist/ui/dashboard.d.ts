@@ -13,6 +13,8 @@ export declare class Dashboard {
     private projectName;
     private openTileSettingsPanel;
     private globalTileSettingsEventsAttached;
+    private settingsPanelLayoutListenersAttached;
+    private suppressSettingsOutsideClick;
     private allTopics;
     private allFiles;
     private allNotes;
@@ -52,6 +54,16 @@ export declare class Dashboard {
     private applyTileVisibility;
     private bindDragHandleForTile;
     private attachTileSettingsEvents;
+    private ensureSettingsPanelLayoutListeners;
+    /** Remove panels hoisted to document.body (orphans after tile re-render). */
+    private cleanupPortaledSettingsPanels;
+    /**
+     * Hoist the open panel to document.body so position:fixed is relative to the
+     * viewport (tile CSS transforms otherwise trap fixed descendants).
+     */
+    private portalOpenSettingsPanel;
+    private repositionPortaledSettingsPanel;
+    private applySettingsPanelPosition;
     private closeOpenTileSettingsPanel;
     private toggleTileSettingsPanel;
     private refreshConfiguredTile;

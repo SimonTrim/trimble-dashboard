@@ -139,6 +139,7 @@ export class Dashboard {
   private openTileSettingsPanel: string | null = null;
   private globalTileSettingsEventsAttached = false;
   private settingsPanelLayoutListenersAttached = false;
+  private suppressSettingsOutsideClick = false;
 
   private allTopics: BCFTopic[] = [];
   private allFiles: ProjectFile[] = [];
@@ -601,7 +602,11 @@ export class Dashboard {
         e.stopPropagation();
         const tileId = boundBtn.dataset.tileId;
         if (!tileId) return;
+        this.suppressSettingsOutsideClick = true;
         this.toggleTileSettingsPanel(tileId);
+        requestAnimationFrame(() => {
+          this.suppressSettingsOutsideClick = false;
+        });
       });
     });
 
@@ -670,7 +675,7 @@ export class Dashboard {
 
     if (!this.globalTileSettingsEventsAttached) {
       document.addEventListener('click', (e) => {
-        if (!this.openTileSettingsPanel) return;
+        if (!this.openTileSettingsPanel || this.suppressSettingsOutsideClick) return;
         const target = e.target as HTMLElement;
         if (target.closest('.tile-settings-panel')) return;
         if (target.closest('.tile-settings-toggle')) return;
@@ -685,26 +690,45 @@ export class Dashboard {
   private ensureSettingsPanelLayoutListeners(): void {
     if (this.settingsPanelLayoutListenersAttached) return;
     this.settingsPanelLayoutListenersAttached = true;
-    const reposition = () => {
-      if (this.openTileSettingsPanel) {
-        this.positionOpenTileSettingsPanel(this.openTileSettingsPanel);
-      }
-    };
-    window.addEventListener('resize', reposition);
-    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', () => {
+      if (!this.openTileSettingsPanel) return;
+      this.repositionPortaledSettingsPanel(this.openTileSettingsPanel);
+    });
+  }
+
+  /** Remove panels hoisted to document.body (orphans after tile re-render). */
+  private cleanupPortaledSettingsPanels(): void {
+    document.querySelectorAll('.tile-settings-panel.is-portaled').forEach(el => el.remove());
   }
 
   /**
-   * Render settings panels in fixed viewport coordinates so they are never
-   * clipped by tile overflow, grid row height, or dashboard scroll containers.
+   * Hoist the open panel to document.body so position:fixed is relative to the
+   * viewport (tile CSS transforms otherwise trap fixed descendants).
    */
-  private positionOpenTileSettingsPanel(tileId: string): void {
+  private portalOpenSettingsPanel(tileId: string): void {
     const tile = document.querySelector(`.tile[data-tile-id="${tileId}"]`) as HTMLElement | null;
     if (!tile) return;
 
     const panel = tile.querySelector('.tile-settings-panel.open') as HTMLElement | null;
+    if (!panel) return;
+
+    document.body.appendChild(panel);
+    panel.classList.add('is-portaled', 'is-fixed');
+    this.applySettingsPanelPosition(panel, tile);
+  }
+
+  private repositionPortaledSettingsPanel(tileId: string): void {
+    const panel = document.body.querySelector(
+      `.tile-settings-panel.is-portaled[data-tile-id="${tileId}"]`,
+    ) as HTMLElement | null;
+    const tile = document.querySelector(`.tile[data-tile-id="${tileId}"]`) as HTMLElement | null;
+    if (!panel || !tile) return;
+    this.applySettingsPanelPosition(panel, tile);
+  }
+
+  private applySettingsPanelPosition(panel: HTMLElement, tile: HTMLElement): void {
     const card = tile.querySelector('.card') as HTMLElement | null;
-    if (!panel || !card) return;
+    if (!card) return;
 
     const cardRect = card.getBoundingClientRect();
     const header = card.querySelector('.card-header') as HTMLElement | null;
@@ -713,33 +737,33 @@ export class Dashboard {
     const gap = 8;
     const viewportPadding = 16;
 
-    panel.classList.add('is-fixed');
-    panel.style.display = 'block';
-    panel.style.visibility = 'hidden';
-    panel.style.left = `${cardRect.left + padding}px`;
-    panel.style.width = `${Math.max(220, cardRect.width - padding * 2)}px`;
+    const width = Math.max(240, cardRect.width - padding * 2);
+    const left = Math.max(viewportPadding, cardRect.left + padding);
+    const maxLeft = window.innerWidth - width - viewportPadding;
+    const clampedLeft = Math.min(left, maxLeft);
+
+    panel.style.position = 'fixed';
+    panel.style.left = `${clampedLeft}px`;
+    panel.style.width = `${width}px`;
     panel.style.right = 'auto';
+    panel.style.display = 'block';
+    panel.style.zIndex = '10000';
 
     let top = anchorRect.bottom + gap;
-    let maxHeight = Math.min(420, window.innerHeight - top - viewportPadding);
     panel.style.top = `${top}px`;
     panel.style.bottom = 'auto';
-    panel.style.maxHeight = `${maxHeight}px`;
+    panel.style.maxHeight = `${Math.min(420, window.innerHeight - top - viewportPadding)}px`;
 
-    panel.style.visibility = 'visible';
-    const panelHeight = panel.getBoundingClientRect().height;
-
-    if (top + panelHeight > window.innerHeight - viewportPadding) {
-      const topAbove = anchorRect.top - panelHeight - gap;
+    const panelRect = panel.getBoundingClientRect();
+    if (panelRect.bottom > window.innerHeight - viewportPadding) {
+      const topAbove = anchorRect.top - panelRect.height - gap;
       if (topAbove >= viewportPadding) {
         top = topAbove;
-        maxHeight = Math.min(420, anchorRect.top - gap - viewportPadding);
       } else {
         top = viewportPadding;
-        maxHeight = window.innerHeight - viewportPadding * 2;
       }
       panel.style.top = `${top}px`;
-      panel.style.maxHeight = `${maxHeight}px`;
+      panel.style.maxHeight = `${Math.min(420, window.innerHeight - top - viewportPadding)}px`;
     }
   }
 
@@ -747,17 +771,21 @@ export class Dashboard {
     if (!this.openTileSettingsPanel) return;
     const previous = this.openTileSettingsPanel;
     this.openTileSettingsPanel = null;
+    this.cleanupPortaledSettingsPanels();
     this.refreshConfiguredTile(previous);
   }
 
   private toggleTileSettingsPanel(tileId: string): void {
     const previous = this.openTileSettingsPanel;
     this.openTileSettingsPanel = previous === tileId ? null : tileId;
+    this.cleanupPortaledSettingsPanels();
     if (previous) this.refreshConfiguredTile(previous);
     if (this.openTileSettingsPanel) this.refreshConfiguredTile(tileId);
   }
 
   private refreshConfiguredTile(tileId: string): void {
+    this.cleanupPortaledSettingsPanels();
+
     const tile = document.querySelector(`.tile[data-tile-id="${tileId}"]`) as HTMLElement | null;
     if (!tile) {
       this.renderTargetTileById(tileId);
@@ -775,7 +803,9 @@ export class Dashboard {
     this.attachTileSettingsEvents(tile);
     this.renderTargetTileById(tileId);
     if (this.openTileSettingsPanel === tileId) {
-      requestAnimationFrame(() => this.positionOpenTileSettingsPanel(tileId));
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => this.portalOpenSettingsPanel(tileId));
+      });
     }
   }
 
