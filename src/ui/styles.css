@@ -366,11 +366,13 @@ body {
   grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
   grid-auto-flow: dense;
+  overflow: visible;
 }
 
 .tile {
   position: relative;
   min-width: 0;
+  overflow: visible;
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
   perspective: 800px;
   opacity: 0;
@@ -466,6 +468,10 @@ body {
               background 0.3s ease;
 }
 .card.has-floating-panel { overflow: visible; }
+.tile:has(.tile-settings-panel.open) {
+  z-index: 200;
+  overflow: visible;
+}
 .card:hover { box-shadow: var(--shadow-sm); }
 
 [data-theme="dark"] .card {
@@ -522,6 +528,10 @@ body {
   padding: 0.875rem 1.25rem;
   position: relative;
   z-index: 4;
+  overflow: visible;
+}
+.card.has-floating-panel .card-header {
+  z-index: 6;
 }
 .card-header h3 {
   font-size: 0.875rem;
@@ -534,6 +544,9 @@ body {
   opacity: 0.7;
 }
 .card-content { padding: 0 1.25rem 1.25rem; }
+.card.has-floating-panel .card-content {
+  overflow: visible;
+}
 
 /* ============================================
    METRIC CARDS — 8-card grid style
@@ -628,7 +641,7 @@ body {
 }
 
 .tile-settings-wrapper {
-  position: relative;
+  position: static;
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -677,6 +690,14 @@ body {
   height: 0.875rem;
 }
 
+.card.has-floating-panel .tile-settings-panel {
+  top: calc(100% + 0.5rem);
+  right: 1.25rem;
+  left: 1.25rem;
+  width: auto;
+  max-width: none;
+}
+
 .tile-settings-panel {
   position: absolute;
   top: calc(100% + 0.5rem);
@@ -687,9 +708,9 @@ body {
   border: 1px solid var(--border);
   background: var(--card);
   box-shadow: var(--shadow-lg);
-  z-index: 40;
+  z-index: 100;
   display: none;
-  max-height: 360px;
+  max-height: min(420px, 70vh);
   overflow: auto;
   pointer-events: auto;
 }
