@@ -216,6 +216,90 @@ app.use((req, res, next) => {
 });
 
 // ========================================
+// LICENSE GATE (dev / solo)
+// ========================================
+
+const TC_LICENSE_HOSTS = [
+  'https://app.connect.trimble.com',
+  'https://app21.connect.trimble.com',
+  'https://app31.connect.trimble.com',
+  'https://app32.connect.trimble.com',
+];
+
+function licenseAllowedEmails() {
+  return (process.env.LICENSE_ALLOWED_EMAILS || '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function setLicenseCors(res) {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+}
+
+async function fetchTrimbleUserForLicense(rawToken) {
+  const token = String(rawToken || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
+
+  for (const host of TC_LICENSE_HOSTS) {
+    try {
+      const response = await fetch(`${host}/tc/api/2.0/users/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (error) {
+      console.warn(`⚠️ verify-license ${host}:`, error.message);
+    }
+  }
+  return null;
+}
+
+app.options('/api/verify-license', (req, res) => {
+  setLicenseCors(res);
+  res.status(204).end();
+});
+
+app.get('/api/verify-license', async (req, res) => {
+  setLicenseCors(res);
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !/^Bearer\s+/i.test(authHeader)) {
+    return res.status(401).json({ authorized: false });
+  }
+
+  const rawToken = authHeader.replace(/^Bearer\s+/i, '');
+  const allowlist = licenseAllowedEmails();
+
+  if (!allowlist.length) {
+    return res.status(503).json({
+      authorized: false,
+      error: 'LICENSE_ALLOWED_EMAILS non configuré sur Vercel',
+    });
+  }
+
+  try {
+    const user = await fetchTrimbleUserForLicense(rawToken);
+    if (!user) {
+      return res.status(403).json({ authorized: false });
+    }
+
+    const email = String(user.email || '').trim().toLowerCase();
+    if (!email || !allowlist.includes(email)) {
+      return res.status(403).json({ authorized: false });
+    }
+
+    return res.status(200).json({ authorized: true, email });
+  } catch (error) {
+    console.error('❌ verify-license error:', error);
+    return res.status(500).json({ authorized: false });
+  }
+});
+
+// ========================================
 // AUTH ROUTES
 // ========================================
 

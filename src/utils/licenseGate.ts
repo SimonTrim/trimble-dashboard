@@ -15,6 +15,10 @@ function licenseApiBase(): string {
   return (fromBuild || fromWindow).replace(/\/$/, '');
 }
 
+function normalizeAccessToken(accessToken: string): string {
+  return accessToken.replace(/^Bearer\s+/i, '').trim();
+}
+
 export async function verifyLicenseAccess(
   accessToken: string,
   isEmbedded: boolean
@@ -38,8 +42,9 @@ export async function verifyLicenseAccess(
   }
 
   try {
+    const token = normalizeAccessToken(accessToken);
     const response = await fetch(`${apiBase}/verify-license`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${token}` },
     });
 
     if (response.ok) {

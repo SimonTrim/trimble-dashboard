@@ -16,7 +16,7 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/((?!verify-license).*)", "destination": "/api/index.js" },
+    { "source": "/api/:path*", "destination": "/api/index.js" },
     { "source": "/auth/:path*", "destination": "/api/index.js" },
     { "source": "/callback", "destination": "/api/index.js" },
     { "source": "/health", "destination": "/api/index.js" }

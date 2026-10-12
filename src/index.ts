@@ -14,6 +14,10 @@ import { openProjectFileInViewer, setViewerContext } from './api/fileNavigationS
 import { mapProjectLocationToWebRegion } from './utils/trimbleViewer';
 import { verifyLicenseAccess } from './utils/licenseGate';
 
+function normalizeAccessToken(accessToken: string): string {
+  return accessToken.replace(/^Bearer\s+/i, '').trim();
+}
+
 function defaultBackendUrl(): string {
   if ((window as any).BACKEND_URL) {
     return (window as any).BACKEND_URL;
@@ -471,7 +475,8 @@ async function getCurrentProjectInfo(): Promise<any> {
 async function initializeWithToken(accessToken: string, projectInfo: any): Promise<void> {
   logger.info('Initializing with Trimble Connect token...');
 
-  const license = await verifyLicenseAccess(accessToken, !isStandaloneMode);
+  const normalizedToken = normalizeAccessToken(accessToken);
+  const license = await verifyLicenseAccess(normalizedToken, !isStandaloneMode);
   if (!license.ok) {
     displayAuthError(license.error);
     return;
@@ -481,7 +486,7 @@ async function initializeWithToken(accessToken: string, projectInfo: any): Promi
   const apiAdapter = createWorkspaceAPIAdapter({
     workspaceAPI: workspaceAPI as any,
     projectInfo: projectInfo,
-    accessToken: accessToken,
+    accessToken: normalizedToken,
     baseUrl: defaultBackendUrl(),
   });
   
