@@ -1,4 +1,5 @@
 const path = require('path');
+const webpack = require('webpack');
 
 module.exports = {
   entry: './src/index.ts',
@@ -31,4 +32,10 @@ module.exports = {
   },
   devtool: 'source-map',
   mode: 'development',
+  plugins: [
+    new webpack.DefinePlugin({
+      __LICENSE_API_URL__: JSON.stringify(process.env.VITE_LICENSE_API_URL || ''),
+      __SKIP_LICENSE__: JSON.stringify(process.env.VITE_SKIP_LICENSE === 'true'),
+    }),
+  ],
 };

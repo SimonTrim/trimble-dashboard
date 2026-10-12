@@ -66,7 +66,11 @@ export class WorkspaceAPIAdapter {
     this.accessToken = accessToken || null;
     
     // Utiliser le backend proxy au lieu de l'API Trimble directe
-    this.backendUrl = backendUrl || 'https://trimble-dashboard.vercel.app';
+    this.backendUrl =
+      backendUrl ||
+      (typeof window !== 'undefined' && window.location?.origin?.startsWith('http')
+        ? window.location.origin
+        : 'https://trimble-dashboard.vercel.app');
     
     logger.info(`✅ WorkspaceAPIAdapter initialized for project: ${projectId}`);
     logger.info(`🌍 Region: ${this.projectLocation}`);

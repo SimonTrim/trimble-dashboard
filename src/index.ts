@@ -12,6 +12,17 @@ import { createWorkspaceAPIAdapter } from './api/workspaceAPIAdapter';
 import { authService } from './api/authService';
 import { openProjectFileInViewer, setViewerContext } from './api/fileNavigationService';
 import { mapProjectLocationToWebRegion } from './utils/trimbleViewer';
+import { verifyLicenseAccess } from './utils/licenseGate';
+
+function defaultBackendUrl(): string {
+  if ((window as any).BACKEND_URL) {
+    return (window as any).BACKEND_URL;
+  }
+  if (window.location?.origin && window.location.origin.startsWith('http')) {
+    return window.location.origin;
+  }
+  return 'https://trimble-dashboard.vercel.app';
+}
 
 // Type pour l'API Workspace
 interface WorkspaceAPIInstance {
@@ -186,7 +197,7 @@ function createSidebarMenu(): void {
 
   const mainMenuObject = {
     title: 'Dashboard',
-    icon: 'https://simontrim.github.io/trimble-dashboard/new_icon_dashboard.png',
+    icon: `${window.location.origin}/icon-48.png`,
     command: 'show_dashboard',
   };
 
@@ -459,13 +470,19 @@ async function getCurrentProjectInfo(): Promise<any> {
  */
 async function initializeWithToken(accessToken: string, projectInfo: any): Promise<void> {
   logger.info('Initializing with Trimble Connect token...');
+
+  const license = await verifyLicenseAccess(accessToken, !isStandaloneMode);
+  if (!license.ok) {
+    displayAuthError(license.error);
+    return;
+  }
   
   // Créer un adaptateur avec le token
   const apiAdapter = createWorkspaceAPIAdapter({
     workspaceAPI: workspaceAPI as any,
     projectInfo: projectInfo,
     accessToken: accessToken,
-    baseUrl: (window as any).BACKEND_URL || 'https://trimble-dashboard.vercel.app'
+    baseUrl: defaultBackendUrl(),
   });
   
   // Initialiser le client Trimble avec l'adaptateur

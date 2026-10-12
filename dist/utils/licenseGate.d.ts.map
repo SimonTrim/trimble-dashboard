@@ -1,0 +1,1 @@
+{"version":3,"file":"licenseGate.d.ts","sourceRoot":"","sources":["../../src/utils/licenseGate.ts"],"names":[],"mappings":"AAAA;;GAEG;AAKH,MAAM,MAAM,iBAAiB,GACzB;IAAE,EAAE,EAAE,IAAI,CAAA;CAAE,GACZ;IAAE,EAAE,EAAE,KAAK,CAAC;IAAC,KAAK,EAAE,MAAM,CAAA;CAAE,CAAC;AAQjC,wBAAsB,mBAAmB,CACvC,WAAW,EAAE,MAAM,EACnB,UAAU,EAAE,OAAO,GAClB,OAAO,CAAC,iBAAiB,CAAC,CAmC5B"}

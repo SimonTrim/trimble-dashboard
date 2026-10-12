@@ -200,6 +200,7 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (/^https:\/\/[\w-]+\.vercel\.app$/.test(origin)) return callback(null, true);
     console.warn(`⚠️ Origin rejected: ${origin}`);
     callback(new Error(`Origin ${origin} not allowed by CORS`));
   },

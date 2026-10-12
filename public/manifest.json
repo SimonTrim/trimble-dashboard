@@ -1,7 +1,8 @@
 {
-  "icon": "https://simontrim.github.io/trimble-dashboard/new_icon_dashboard.png",
-  "title": "Dashboard",
-  "url": "https://simontrim.github.io/trimble-dashboard/public/index.html",
-  "description": "Tableau de bord des métriques projet - Notes, BCF, Fichiers, Vues",
+  "title": "Trimble Dashboard",
+  "url": "https://trimble-dashboard-dev.vercel.app/",
+  "icon": "https://trimble-dashboard-dev.vercel.app/icon-48.png",
+  "extensionType": "project",
+  "description": "Visualisation métriques projet Trimble Connect",
   "enabled": true
 }
