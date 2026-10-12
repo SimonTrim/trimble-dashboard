@@ -7,7 +7,7 @@
     "dev": "webpack --mode development --watch",
     "check": "tsc --noEmit",
     "build": "webpack --mode production && npm run copy-dist",
-    "copy-dist": "powershell -Command \"New-Item -ItemType Directory -Path 'public/dist' -Force | Out-Null; Copy-Item -Path 'dist/index.js' -Destination 'public/dist/index.js' -Force\"",
+    "copy-dist": "node -e \"require('fs').mkdirSync('public/dist',{recursive:true});require('fs').copyFileSync('dist/index.js','public/dist/index.js')\"",
     "clean": "rimraf dist",
     "test": "echo \"Tests à venir\" && exit 0",
     "serve": "http-server public -p 8080 -c-1 --cors"
