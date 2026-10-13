@@ -9,10 +9,14 @@ export type LicenseGateResult =
   | { ok: true }
   | { ok: false; error: string };
 
-function licenseApiBase(): string {
+function licenseApiBase(isEmbedded: boolean): string {
   const fromBuild = typeof __LICENSE_API_URL__ !== 'undefined' ? __LICENSE_API_URL__ : '';
   const fromWindow = (window as { LICENSE_API_URL?: string }).LICENSE_API_URL ?? '';
-  return (fromBuild || fromWindow).replace(/\/$/, '');
+  let base = (fromBuild || fromWindow).replace(/\/$/, '');
+  if (!base && isEmbedded && window.location?.origin?.startsWith('http')) {
+    base = `${window.location.origin}/api`;
+  }
+  return base;
 }
 
 function normalizeAccessToken(accessToken: string): string {
@@ -36,7 +40,7 @@ export async function verifyLicenseAccess(
     };
   }
 
-  const apiBase = licenseApiBase();
+  const apiBase = licenseApiBase(isEmbedded);
   if (!apiBase) {
     return { ok: false, error: 'VITE_LICENSE_API_URL non configuré.' };
   }

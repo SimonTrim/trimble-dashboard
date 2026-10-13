@@ -1,6 +1,6 @@
 {
   "title": "Trimble Dashboard",
-  "url": "https://trimble-dashboard-dev.vercel.app/",
+  "url": "https://trimble-dashboard-dev.vercel.app/index.html",
   "icon": "https://trimble-dashboard-dev.vercel.app/icon-48.png",
   "extensionType": "project",
   "description": "Visualisation métriques projet Trimble Connect",

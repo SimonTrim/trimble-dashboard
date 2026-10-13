@@ -160,6 +160,9 @@ async function initializeIntegrated(): Promise<void> {
       location: projectInfo.location 
     });
 
+    // Menu latéral dès que l'API Workspace est prête (avant token / licence)
+    createSidebarMenu();
+
     // Étape 3: Demander l'access token à Trimble Connect
     logger.info('Requesting access token from Trimble Connect...');
     
@@ -478,6 +481,7 @@ async function initializeWithToken(accessToken: string, projectInfo: any): Promi
   const normalizedToken = normalizeAccessToken(accessToken);
   const license = await verifyLicenseAccess(normalizedToken, !isStandaloneMode);
   if (!license.ok) {
+    createSidebarMenu();
     displayAuthError(license.error);
     return;
   }
